@@ -200,12 +200,12 @@ CREATE TABLE events (
   url_path TEXT
 );
 ```
-- *** 민감 필드 암호화, 파티셔닝, RBAC 및 감사 로깅 필수 ***
+- **민감 필드 암호화, 파티셔닝, RBAC 및 감사 로깅 필수**
 
 ---
 
 ## 5. 우선순위: 스캔 대상 & 기법
-*** 대상: *** Host(EC2), Network(SecurityGroup/VPC), RDS(PaaS), Container image
+**대상:** Host(EC2), Network(SecurityGroup/VPC), RDS(PaaS), Container image
 - 주요 기법:
   - 1. Host 설정 점검 (CIS/CCE) → Lynis, OpenVAS / Trivy
   - 2. 서비스/포트 스캐닝 → Nmap
