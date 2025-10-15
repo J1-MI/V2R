@@ -3,16 +3,37 @@
 **기간:** 약 6주 (2025-10-27 ~ 2025-11-28)
 **목표:** AWS 기반 테스트베드에서 자동 취약점 탐지 → PoC 격리 재현(증거수집) → PoC 신뢰도 판정 → ML 우선순위 → LLM 기반 Executive Summary 자동생성 → 개발팀용 PR/패치 템플릿 연계까지의 컨설팅형 워크플로우 MVP 구현
 
+**요약:** AWS 격리 테스트베드에서 취약점 자동 스캐닝 → PoC 격리 재현 → 증거 기반 검증 → ML/LLM 기반 리포트 자동화까지의 컨설팅형 워크플로우 MVP 구현
+
 **지원자 유의사항:** 프로젝트 자체 난이도가 어느정도 높다고 판단되어, 학업 또는 취업으로 인해 프로젝트에 집중하기 어려운 경우에는 한번 더 고민 해보시길 부탁 드립니다.
 
 ---
 
+## 목차
+- [1. 기획 의도 및 목표](#1-기획-의도-및-목표)  
+- [2. 기대효과](#2-기대효과)  
+- [3. 스코프(포함/제외)](#3-스코프포함제외)  
+- [4. 아이디어 상세 & 파트별 핵심 포인트](#4-아이디어-상세--파트별-핵심-포인트)  
+  - [4.1 Agent-Scoped 룰(정책)](#41-agent-scoped-룰정책)  
+  - [4.2 에이전트 → 서버 전송 포맷](#42-에이전트--서버-전송-포맷)  
+  - [4.3 원격 명령 채널](#43-원격-명령-채널)  
+  - [4.4 서버 파이프라인/탐지/LLM Advisor (REST API)](#44-서버-파이프라인탐지llm-advisor-rest-api)  
+  - [4.5 DB(핵심 스키마)](#45-db핵심-스키마)  
+- [5. 우선순위: 스캔 대상 & 기법 (MVP 기준)](#5-우선순위-스캔-대상--기법-mvp-기준)  
+- [6. 기술 스택 & 권장 도구 / 명령 예시](#6-기술-스택--권장-도구--명령-예시)  
+- [7. 파트별 책임자](#7-파트별-책임자)  
+- [8. 최종 산출물](#8-최종-산출물)
+- [9. 6주 간 일정(주 단위)](#9-6주-간-일정)   
+- [10. KPI / 성공 기준](#10-kpi--성공-기준-mvp-기준)  
+
+---
+
 ## 1. 기획 의도 및 목표
-- **기획 의도:** 상용 스캐너/오픈소스 툴로는 부족한 ‘PoC의 진위 검증’과 ‘컨설팅 수준의 리포트 품질’을 확보하고자 합니다. 자동화로 반복 업무를 줄이는 동시에, 재현·증거 기반 검증으로 리포트 신뢰도를 보장하는 파이프라인을 만듭니다.
+- **기획 의도:** PoC의 진위(실제 동작 여부)와 리포트 품질을 보장하는 자동화 파이프라인을 구축합니다. 단순 스캔 결과 덤프가 아니라 **격리 재현 + 증거 기반 검증 + 컨설팅형 리포트**를 목표로 합니다.
 - **주요 목표:**  
-  1. 테스트용 격리 인프라(AWS) 구축 및 취약 애플리케이션 배포  
-  2. 스캔 → PoC 인게스트 → 격리 재현 → 행동 기반 증거수집 → 자동 신뢰도 판정 파이프라인 구현  
-  3. ML로 취약점 우선순위 보조, LLM으로 임원용 요약 자동 생성 (리포트 자동화)  
+  1. AWS 기반 격리 텟흐트 인프라(EC2/RDS/Container) 구축
+  2. 스캔 → 정규화 → CVE 매핑 → 행동 기반 증거수집 → 자동 신뢰도 판정 파이프라인 구현  
+  3. ML로 취약점 우선순위 보조, LLM으로 요약 자동 생성 (리포트 자동화) 통합
   4. 취약점 리포트 기반 개발팀 연계(PR 템플릿 자동생성)로 실무 적용성 확보
 
 ---
@@ -25,7 +46,23 @@
 
 ---
 
-## 3. 아이디어 상세 내용 & 파트별 핵심 포인트
+## 3. 스코프(포함/제외)
+
+**포함 (MVP)**  
+- EC2 기반 Host 점검(CIS/CCE 중심)  
+- 네트워크 노출·서비스 스캔(Security Group, Port)  
+- RDS(PaaS) 기본 설정 점검(공개여부, 암호화 등)  
+- 스캔 결과 정규화 → CVE 매핑 → 간단 PoC(비파괴) 격리 재현  
+- 자동 리포트(LLM Executive Summary 포함)
+
+**제외 (초기)**  
+- 프로덕션 직접 테스트(엄격 금지)  
+- 고도화된 IAM 권한 심층분석(선택)  
+- 자동 공격(승인 이후)
+
+---
+
+## 4. 아이디어 상세 내용 & 파트별 핵심 포인트
 
 ### A. 인프라(테스트베드)
 - **내용:** AWS VPC(격리) + EC2(웹·DB) 또는 컨테이너로 취약앱(DVWA, Juice Shop) 배포. Terraform으로 IaC 관리.
@@ -59,9 +96,9 @@
 
 ### 에이전트 정책·전송·명령·서버 파이프라인 예시
 
-#### 3.1 클라이언트별 수집 룰 (Agent-Scoped)
-에이전트는 서명된 정책(YAML/JSON)을 pull/push로 동기화하며 우선순위는 `global < client < host` 방식을 따릅니다.
-룰 항목 예: include/exclude, 필드 마스킹(정규식 redact), 샘플링/레이트 제한, 로컬 보류 조건.
+#### 4.1 Agent-Scoped 룰(정책)
+- **개념:** 서명된 정책(YAML/JSON)으로 에이전트 수집 동작을 제어. 우선순위: `global < client < host`.  
+- **룰 항목(예):** include/exclude, redact(정규식 마스킹), sampling, rate_limit, local_hold.  
 ```yaml
 client_id: acme-web
 version: 3
@@ -76,9 +113,11 @@ rules:
       match: "event.category == 'web'"
       rate_per_sec: 200
 ```
+- include/exclude 및 redact 우선 구현. 정책 서명/버전 관리 등은 차후 확장.
 
-#### 3.2 에이전트 -> 서버 전송
-메시지는 메타·보안·암호화된 페이로드로 구성됩니다. 추천 필드: nonce, timestamp, agent_id, client_id, key_id, payload_hash(SHA-256) 및 선택적 signature
+#### 4.2 에이전트 -> 서버 전송
+- 구성: `meta` + `security` + `ciphertext`
+- 필드: `nonce`, `timestamp`, `agent_id`, `client_id`, `key_id`, `payload_hash`(SHA-256), `signature`
 ```json
 {
   "meta": { "server_id":"srv-collector-01", "client_id":"acme-web", "agent_id":"agent-10",
@@ -87,36 +126,118 @@ rules:
                 "payload_hash":"sha256:3e9f...b7", "signature":"base64-optional" },
   "ciphertext": "base64-blob"
 }
-
 ```
+- TLS 전송 + `payload_hash` 무결성 검증 우선, payload 레벨 암호화(AES-GCM + KMS)는 차후 확장 고려
 
-#### 3.3 원격 명령 채널
-권장 통신 모델은 Pull(heartbeat)이며, 명령의 서명·mTLS·감사 로그를 반드시 적용합니다. 허용 명령 예: RULES_RELOAD, PING, CERT_ROTATE, UPGRADE
+#### 4.3 원격 명령 채널
+- 통신 모델: Pull(heartbeat), Push(gRPC/WebSocket) 중 환경에 맞춰 선택
+- 보안 통제: mTLS + 명령 서명 + 권한 스코프 + 감사 로그
+
+- 서버 → 에이전트 예시:
 ```json
 { "job_id":"uuid","type":"RULES_RELOAD","args":{"policy_version":"5"},
   "issued_at":"2025-10-01T02:20:00Z","signature":"base64" }
 ```
 
-#### 3.4 서버 파이프라인/탐지/조언
-수신 로그는 ECS-lite 형태로 정규화·인리치(GeoIP/UA) 되고, 룰 기반 탐지와 ML(rolling metrics/IForest/EWMA)이 결합된 하이브리드 이벤트를 생성합니다. 
-LLM Advisor는 RAG(근거 Top-K)로 증거를 인용한 권고(제안)만 제공하며 JSON 스키마로 출력합니다
+- 에이전트 → 서버(결과) 예시:
+```json
+{ "job_id":"uuid","status":"SUCCESS","stdout":"...","started_at":"...", "finished_at":"...", "agent_sig":"base64" }
+```
+- RULES_RELOAD, PING/HEALTH 명령 우선 구현
 
-#### 3.5 핵심 DB 스키마
-- 'raw_logs', 'events', 'incidents', 'rules', 'agents' 등
-- 운영권고: 파티셔닝, 민감 필드 암호화, RBAC/감사 로깅
+#### 4.4 서버 파이프라인/탐지/LLM 어드바이저
+- 파이프라인: `Ingest → Normalize(ECS-lite) → Enrich(GeoUP/UA) → Detect(Rule + ML) → Event`
+- LLM 어드바이저: RAG 방식으로 권고 생성, 결과는 JSON 스키마로 반환
+- API:
+  - `POST /ingest/logs` → 수신,검증,저장
+  - `POST /detect/run` → Rule, ML 실행
+  - `POST /advice` → LLM 요약/가이드(JSON 형식)
+  - `GET /events` / `GET /incidents/{id}` → 조회
+  - `GET /export.{pdf|json|csv}` → 산출물
+
+수신 로그는 ECS-lite 형태로 정규화·인리치(GeoIP/UA) 되고, 룰 기반 탐지와 ML(rolling metrics/IForest/EWMA)이 결합된 하이브리드 이벤트를 생성합니다. 
+LLM Advisor는 RAG(근거: Top-K)로 증거를 인용한 권고(제안)만 제공하며 JSON 스키마로 출력합니다
+
+#### 4.5 핵심 DB 스키마
+- `raw_logs`, `events`, `incidents`, `rules`, `agents`, `clients`, `users`, `audit_trail`, `report`
+- 스키마 예시:
+```sql
+CREATE TABLE agents (
+  agent_id TEXT PRIMARY KEY,
+  client_id TEXT,
+  server_fingerprint TEXT,
+  cert_key_id TEXT,
+  version TEXT,
+  last_seen TIMESTAMP,
+  health JSONB
+);
+
+CREATE TABLE raw_logs (
+  id BIGSERIAL PRIMARY KEY,
+  ts TIMESTAMP NOT NULL,
+  host_name TEXT,
+  source_type TEXT,
+  raw_line TEXT,
+  hash_sha256 TEXT,
+  client_id TEXT,
+  agent_id TEXT,
+  tags TEXT[],
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE events (
+  id BIGSERIAL PRIMARY KEY,
+  ts TIMESTAMP NOT NULL,
+  event_category TEXT,
+  severity INT,
+  summary TEXT,
+  evidence_refs JSONB,
+  rule_id TEXT,
+  ml_score FLOAT,
+  client_id TEXT,
+  host_name TEXT,
+  source_ip TEXT,
+  url_path TEXT
+);
+```
+- **민감 필드 암호화, 파티셔닝, RBAC 및 감사 로깅 필수**
 
 ---
 
-## 4. 파트별 책임자 (분배에 따라 일부 수정 예정)
+## 5. 우선순위: 스캔 대상 & 기법
+**대상:** Host(EC2), Network(SecurityGroup/VPC), RDS(PaaS), Container image
+- 주요 기법:
+  - 1. Host 설정 점검 (CIS/CCE) → Lynis, OpenVAS / Trivy
+  - 2. 서비스/포트 스캐닝 → Nmap
+  - 3. 취약점 스캐닝 → Nuclei / OpenVAS / Trivy / 필요시 Fuzzer 활용
+  - 4. 네트워크 노출 점검 → awscli / VPC Reachability / VPC Flow Logs 분석
+
+이후, IAM 심층 분석 및 RAG 고도화 등 확장 고려
+
+---
+
+## 6. 기술 스택 & 권장 툴 (예시, 필요에 따라 변경)
+- Infra / IaC: AWS (VPC/EC2/RDS/S3), Terraform
+- 스캐닝 / 검사: Nmap, Lynis, OpenSCAP, Nuclei, OpenVAS, Trivy
+- PoC 재현 / 격리: Docker, Firecracker(활용 가능시) / Kata Containers, AMI Snapshot
+- 데이터 파이프라인: Python, PostgreSQL, S3
+- ML / LLM: OpenAI API or local LLM
+- 대시보드: Streamlit / React
+- 증거 수집: tcpdump/tshark, strace/eBPF, inotify/FS diff
+
+---
+
+## 7. 파트별 책임자 
+**(분배에 따라 일부 수정 예정)**
 - **인프라/아키텍트:** 테스트 VPC, Terraform, 이미지 관리  
 - **보안/PoC 담당:** 스캐너 운영, PoC 작성/재현/검증 룰  
 - **ML/LLM 엔지니어:** 우선순위 모델, LLM 프롬프트, 임베딩(옵션)  
 - **풀스택 개발자:** 파이프라인 API, 리포트 모듈, 대시보드, PR 연동  
-- **PM:** 일정·승인·발표·문서관리
+- **PM:** 일정관리·승인·발표·문서관리 등
 
 ---
 
-## 5. 최종 산출물
+## 8. 최종 산출물
 1. **Terraform 템플릿** — 격리 테스트 VPC 및 인프라 코드  
 2. **PoC 재현 엔진 코드** — 컨테이너/VM 오케스트레이션 스크립트(스냅샷·롤백 포함)  
 3. **증거 수집 아티팩트** — pcap, syscall logs, FS diff, 스크린샷 (샘플)  
@@ -130,7 +251,7 @@ LLM Advisor는 RAG(근거 Top-K)로 증거를 인용한 권고(제안)만 제공
 
 ---
 
-## 6. 6주 간 일정
+## 9. 6주 간 일정
 > **운영원칙:** 주간 경과보고 1회(각 주 금요일), 매 주 월요일 주간 계획 브리핑 / 수요일 중간 브리핑 || 총 주 3회 
 
 - **Week 0 (사전, 2–3일)**  
@@ -156,7 +277,15 @@ LLM Advisor는 RAG(근거 Top-K)로 증거를 인용한 권고(제안)만 제공
 
 ---
 
-## 7. 지원 방법
+## 10. KPI / 성공 기준 (MVP 기준)
+- PoC 재현 성공률 ≥ 60%
+- 자동 CVE 매핑과 수동 매핑 검토 일치율 ≥ 80%
+- 자동 리포트 초안 완성도 (팀 내부적 판단)
+- 스캔 범위: 테스트 이미지 내 80% 이상
+
+---
+
+## 0. 지원 방법
 - **지원서식(예시)** 김지민 / kingone750@gmail.com, Discord ID: j1_mi, GitHub 사용자명: J1-MI / 희망 역할(우선순위 1~2) / 관련 경험 및 간단한 기술 스택
 - **지원 및 문의:** Discord DM
 
