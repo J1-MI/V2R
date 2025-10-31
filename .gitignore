@@ -1,0 +1,82 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# AWS
+.aws/
+*.pem
+*.key
+
+# 증거 파일
+evidence/
+*.pcap
+*.log
+*.dump
+
+# 환경 변수
+.env
+.env.local
+.env.prod
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+
+# ML 모델
+models/*.pkl
+models/*.model
+models/*.h5
+
+# 리포트
+reports/*.pdf
+reports/*.docx
+
+# 데이터베이스
+*.db
+*.sqlite
+

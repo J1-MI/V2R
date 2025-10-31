@@ -6,11 +6,116 @@
 
 **요약:** AWS 격리 테스트베드에서 취약점 자동 스캐닝 → PoC 격리 재현 → 증거 기반 검증 → ML/LLM 기반 리포트 자동화까지의 컨설팅형 워크플로우 MVP 구현
 
-**지원자 유의사항:** 프로젝트 자체 난이도가 어느정도 높다고 판단되어, 학업 또는 취업으로 인해 프로젝트에 집중하기 어려운 경우에는 한번 더 고민 해보시길 부탁 드립니다.
+### 전체 워크플로우
 
-**최종 수정 일자:** 2025-10-24
+```mermaid
+graph TD
+    A[타겟 인프라<br/>AWS EC2/VPC] --> B[스캐너 실행]
+    B --> C[Nmap<br/>포트/서비스 스캔]
+    B --> D[Nuclei<br/>취약점 스캔]
+    B --> E[OpenVAS<br/>선택적]
+    
+    C --> F[스캔 결과 정규화]
+    D --> F
+    E --> F
+    
+    F --> G[공통 JSON 스키마 변환]
+    G --> H[CVE 추출 및 매핑]
+    H --> I[데이터베이스 저장<br/>PostgreSQL]
+    
+    I --> J{PoC 필요?}
+    J -->|Yes| K[PoC 격리 재현 환경<br/>Docker/Firecracker]
+    J -->|No| M[우선순위 평가]
+    
+    K --> L[증거 수집<br/>strace/pcap/FS diff]
+    L --> N[PoC 신뢰도 판정<br/>0~100 점수]
+    N --> M
+    
+    M --> O[ML 우선순위 분류<br/>XGBoost]
+    O --> P[LLM 리포트 생성<br/>Executive Summary]
+    
+    P --> Q[기술본 생성<br/>python-docx]
+    P --> R[PR 템플릿 생성<br/>GitHub API]
+    
+    Q --> S[최종 리포트<br/>PDF/DOCX]
+    R --> T[개발팀 연계<br/>GitHub PR]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style F fill:#e8f5e9
+    style I fill:#f3e5f5
+    style K fill:#ffe0e0
+    style N fill:#fff9c4
+    style O fill:#e3f2fd
+    style P fill:#fce4ec
+    style S fill:#e8f5e9
+    style T fill:#e8f5e9
+    
+    classDef implemented fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    classDef planned fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    
+    class C,D,F,G,H,I implemented
+    class K,L,N,O,P,Q,R,S,T planned
+```
+
+**구현 상태:**
+- ✅ **구현 완료**: 스캐너 실행, 정규화, DB 저장
+- 🟡 **진행 예정**: PoC 재현, 신뢰도 판정, ML/LLM, 리포트 생성
+
+**지원자 유의사항:** 프로젝트 자체 난이도가 어느 정도 높다고 판단되어, 학업 또는 취업으로 인해 프로젝트에 집중하기 어려운 경우에는 한번 더 고민 해보시길 부탁 드립니다.
+
+**프로젝트 특성:** 1인 개발 프로젝트로 진행됩니다.
+
+**최종 수정 일자:** 2025-11-01 (진행 상황 업데이트)
 
 ## 추가 및 변경 내용
+
+### 2025-11-01 업데이트
+1. **프로젝트 구조 초기화**: 프로젝트 기본 구조 및 디렉토리 생성 완료
+2. **Terraform 인프라 코드**: AWS VPC, EC2, S3 인프라 구성 코드 작성 완료
+   - VPC/서브넷/보안그룹 구성 (의도적 취약 설정 포함)
+   - 웹 서버 및 스캐너 EC2 인스턴스 구성
+   - S3 증거 저장소 설정
+   - DVWA/Juice Shop 배포용 user_data 스크립트
+3. **스캐너 모듈 구현**: Nmap 및 Nuclei 스캐너 통합 완료
+   - Nmap 스캐너 래퍼 클래스 (포트 스캔, 버전 탐지)
+   - Nuclei 스캐너 통합 (CVE 템플릿 기반 스캔)
+   - 스캔 결과 정규화 모듈 (공통 JSON 스키마)
+4. **데이터베이스 연결 모듈**: PostgreSQL 연결 및 스키마 관리 구현
+   - 데이터베이스 연결 관리 클래스
+   - 스키마 자동 생성 기능
+5. **Docker 환경 마이그레이션**: 개발/프로덕션 환경 통합
+   - Dockerfile (프로덕션), Dockerfile.dev (개발)
+   - docker-compose.yml (PostgreSQL 통합)
+   - Makefile을 통한 편의 명령어 제공
+6. **개발 환경 문서화**: SETUP.md 및 README_DOCKER.md 작성
+7. **의존성 패키지 관리**: Python 패키지 의존성 명시 및 Docker 자동 설치
+   - **주요 의존성 패키지:**
+     - **AWS SDK**: boto3, botocore
+     - **네트워크 스캐닝**: python-nmap, requests
+     - **데이터 처리**: pandas, numpy
+     - **데이터베이스**: sqlalchemy, psycopg2-binary
+     - **ML/LLM**: openai, scikit-learn, xgboost
+     - **리포트 생성**: python-docx, reportlab
+     - **웹 대시보드**: streamlit
+     - **유틸리티**: python-dotenv, pyyaml, jinja2
+     - **테스트**: pytest, pytest-cov
+   - 모든 패키지는 `requirements.txt`에 명시되어 있으며, Docker 이미지 빌드 시 자동 설치됨
+8. **데이터베이스 ORM 모델 구현**: SQLAlchemy 기반 데이터 모델 정의
+   - ScanResult, POCMetadata, POCReproduction, Event, Report 모델
+   - 모든 모델에 to_dict() 메서드 포함
+9. **데이터베이스 저장소 패턴**: Repository 패턴으로 데이터 접근 계층 구현
+   - ScanResultRepository: 스캔 결과 CRUD 및 통계
+   - POCMetadataRepository: PoC 메타데이터 관리
+   - POCReproductionRepository: PoC 재현 결과 관리
+10. **스캐너 파이프라인 통합**: 전체 워크플로우 자동화
+    - ScannerPipeline 클래스: 스캔 → 정규화 → DB 저장 자동화
+    - Nmap/Nuclei 스캔 파이프라인 통합
+    - 전체 스캔 (Full Scan) 기능: Nmap + Nuclei 통합 실행
+    - 자동 심각도 계산 및 CVE 추출
+11. **통합 테스트 스크립트**: 파이프라인 검증을 위한 테스트 도구 제공
+
+### 초기 계획 (2025-10-24)
 1. **EC2 취약 테스트 서버(예시 취약 앱)** 배포: 의도적으로 RCE가 가능한 예시 CVE를 포함한 웹페이지와 함께, MySQL/SSH 포트 외부 노출 등의 취약 설정을 포함합니다. (예시 CVE는 식별자 형태로만 기재; exploit 코드는 포함하지 않습니다.)  
 2. **외부 스캐닝 절차** 명확화: 네트워크 스캔(Nmap 등), CVE 스캔(Nuclei/OpenVAS/Trivy), DAST(OWASP ZAP 등) 순서로 실행합니다.  
 3. **CCE 기반 서버 점검 스크립트** 추가: 금융보안원 전자금융기반시설 보안 취약점 평가기준(서버: Linux 항목)을 기준으로 점검 스크립트를 작성합니다. IF-구조로 양호/취약 판정 → 결과는 JSON 또는 XML로 출력합니다.  
@@ -30,10 +135,10 @@
   - [4.5 DB(핵심 스키마)](#45-핵심-db-스키마)  
 - [5. 우선순위: 스캔 대상 & 기법 (MVP 기준)](#5-우선순위-스캔-대상--기법-mvp-기준)  
 - [6. 기술 스택 & 권장 도구 / 명령 예시](#6-기술-스택--권장-도구--명령-예시)  
-- [7. 파트별 책임자](#7-파트별-책임자)  
-- [8. 최종 산출물](#8-최종-산출물)
-- [9. 6주 간 일정(주 단위)](#9-6주-간-일정)   
-- [10. KPI / 성공 기준](#10-kpi--성공-기준-mvp-기준)  
+- [7. 최종 산출물](#7-최종-산출물)
+- [8. 6주 간 일정(주 단위)](#8-6주-간-일정)   
+- [9. KPI / 성공 기준](#9-kpi--성공-기준-mvp-기준)
+- [10. 개발 방법론](#10-개발-방법론)  
 
 ---
 
@@ -132,7 +237,7 @@ rules:
 ```
 - include/exclude 및 redact 우선 구현. 정책 서명/버전 관리 등은 차후 확장.
 
-#### 4.2 에이전트 -> 서버 전송
+#### 4.2 에이전트 → 서버 전송
 - 구성: `meta` + `security` + `ciphertext`
 - 필드: `nonce`, `timestamp`, `agent_id`, `client_id`, `key_id`, `payload_hash`(SHA-256), `signature`
 ```json
@@ -172,7 +277,7 @@ rules:
   - `GET /events` / `GET /incidents/{id}` → 조회
   - `GET /export.{pdf|json|csv}` → 산출물
 
-수신 로그는 ECS-lite 형태로 정규화·인리치(GeoIP/UA) 되고, 룰 기반 탐지와 ML(rolling metrics/IForest/EWMA)이 결합된 하이브리드 이벤트를 생성합니다. 
+수신 로그는 ECS-lite 형태로 정규화·인리치먼트(GeoIP/UA) 되고, 룰 기반 탐지와 ML(rolling metrics/IForest/EWMA)이 결합된 하이브리드 이벤트를 생성합니다. 
 LLM Advisor는 RAG(근거: Top-K)로 증거를 인용한 권고(제안)만 제공하며 JSON 스키마로 출력합니다
 
 #### 4.5 핵심 DB 스키마
@@ -232,7 +337,7 @@ CREATE TABLE events (
 이후, IAM 심층 분석 및 RAG 고도화 등 확장 고려
 
 **외부 스캐닝 절차**
-E2C를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝을 진행한다.
+EC2를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝을 진행한다.
 
 1. **네트워크 스캔** (목적: 열린 포트/서비스 식별)  
    - 도구: Nmap, Masscan(빠른 탐지)  
@@ -269,7 +374,7 @@ E2C를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝�
     ```
 - **보고서:** 개별 호스트 JSON / 전체 요약 JSON 혹은 XML 리포트 생성
 
-- Ansible 연동을 통해 여러 E2C 서버 대상에 CCE 점검 스크립트를 일괄 패보 및 실행하고 결과 수집을 자동화하여 편의성 향상
+- Ansible 연동을 통해 여러 EC2 서버 대상에 CCE 점검 스크립트를 일괄 배포 및 실행하고 결과 수집을 자동화하여 편의성 향상
 
 ---
 
@@ -284,17 +389,9 @@ E2C를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝�
 
 ---
 
-## 7. 파트별 책임자 
-**(분배에 따라 일부 수정 예정)**
-- **인프라/아키텍트:** 테스트 VPC, Terraform, 이미지 관리  
-- **보안/PoC 담당:** 스캐너 운영, PoC 작성/재현/검증 룰  
-- **ML/LLM 엔지니어:** 우선순위 모델, LLM 프롬프트, 임베딩(옵션)  
-- **풀스택 개발자:** 파이프라인 API, 리포트 모듈, 대시보드, PR 연동  
-- **PM:** 일정관리·승인·발표·문서관리 등
-
 ---
 
-## 8. 최종 산출물
+## 7. 최종 산출물
 1. **Terraform 템플릿** — 격리 테스트 VPC 및 인프라 코드  
 2. **PoC 재현 엔진 코드** — 컨테이너/VM 오케스트레이션 스크립트(스냅샷·롤백 포함)  
 3. **증거 수집 아티팩트** — pcap, syscall logs, FS diff, 스크린샷 (샘플)  
@@ -308,11 +405,11 @@ E2C를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝�
 
 ---
 
-## 9. 6주 간 일정
+## 8. 6주 간 일정
 > **운영원칙:** 주간 경과보고 1회(각 주 금요일), 매 주 월요일 주간 계획 브리핑 / 수요일 중간 브리핑 || 총 주 3회 
 
 - **Week 0 (사전, 2–3일)**  
-  - 레포·Notion 초기화, 역할 확정
+  - 레포·Notion 초기화, 개발 방법론 설정
 
 - **Week 1 — 인프라 준비 & 테스트앱 배포**  
   - Terraform 기본, VPC/서브넷/보안그룹, DVWA/ Juice Shop 배포, 신뢰 PoC 목록 수집
@@ -334,10 +431,66 @@ E2C를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝�
 
 ---
 
-## 10. KPI / 성공 기준 (MVP 기준)
+## 9. KPI / 성공 기준 (MVP 기준)
 - PoC 재현 성공률 ≥ 60%
 - 자동 CVE 매핑과 수동 매핑 검토 일치율 ≥ 80%
-- 자동 리포트 초안 완성도 (팀 내부적 판단)
+- 자동 리포트 초안 완성도 (개발자 내부적 판단)
 - 스캔 범위: 테스트 이미지 내 80% 이상
+
+---
+
+## 10. 개발 방법론
+
+### Personal Kanban + MVP-First Iterative Development
+
+본 프로젝트는 1인 개발 프로젝트의 특성에 맞춘 **Personal Kanban + MVP-First** 방법론을 적용합니다.
+
+#### 선택 이유
+- **1인 개발**: 전통적 스크럼/애자일은 팀 협업 중심, 1인에겐 과함
+- **6주 제한**: 명확한 마일스톤, 빠른 피벗 필요
+- **복잡한 시스템**: 여러 모듈 병렬 진행 가능, 우선순위 관리 필수
+- **MVP 목표**: 핵심 기능 중심 점진적 완성
+
+#### 방법론 구조
+
+**1. Personal Kanban 보드 구조**
+```
+[Backlog] → [This Week] → [In Progress] → [Blocked] → [Review] → [Done]
+```
+
+**2. 주 단위 Sprint (Week-based)**
+- **주간 목표**: README의 Week N 목표에 맞춤
+- **주간 회고**: 금요일 (완료/진행/차단 항목 정리)
+- **다음 주 계획**: 주말 또는 월요일 (우선순위 재조정)
+
+**3. 작업 단위 (Task Granularity)**
+- **에픽(Epic)**: 섹션 4의 A~G 파트
+- **스토리(Story)**: 기능 단위 (예: "PoC 격리 실행 환경 구축")
+- **태스크(Task)**: 2-4시간 작업 단위 (예: "Docker 컨테이너 스크립트 작성")
+
+**4. MVP 우선순위 원칙**
+1. **Must Have**: 핵심 파이프라인 (스캔 → 재현 → 리포트)
+2. **Should Have**: 신뢰도 점수화, ML 우선순위
+3. **Nice to Have**: 대시보드 고도화, 자동화 확장
+
+**5. 위험 관리**
+- **차단(Blocked)**: 의존성/인프라 문제 즉시 식별
+- **조기 실패**: 주 2-3일 내 핵심 기능 검증
+- **롤백 계획**: 각 주말에 다음 주 대안 준비
+
+**6. 일일 루틴 (선택)**
+- **매일 아침**: 오늘 할 3가지 우선순위 설정
+- **매일 저녁**: 진행 상황 기록, 내일 계획
+- **차단 발생 시**: 즉시 문서화, 대안 탐색
+
+#### 도구 추천
+- **간단한 버전**: GitHub Projects / GitHub Issues
+- **중간 버전**: Notion 데이터베이스
+- **최소 버전**: 마크다운 파일 (PROJECT_KANBAN.md)
+
+#### 성공 지표
+- 주당 완료 태스크 수 (속도 추적)
+- 차단 시간 최소화 (Blocked → Done 평균 시간)
+- MVP 목표 달성률 (주간 목표 대비)
 
 ---

@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+
+# 증거 파일
+evidence/
+*.pcap
+*.log
+*.dump
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+
+# 문서 (선택)
+*.md
+docs/
+LICENSE
+
+# 테스트 결과
+test_*.json
+test_*.xml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 기타
+*.log
+*.tmp
+.cache/
+

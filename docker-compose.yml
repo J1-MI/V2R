@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15-alpine
+    container_name: v2r-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-v2r}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-v2r_password}
+      POSTGRES_DB: ${DB_NAME:-v2r}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-v2r}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - v2r-network
+
+  # 메인 애플리케이션
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: v2r-app
+    environment:
+      # 데이터베이스 연결 (Docker 내부 네트워크 사용)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-v2r}
+      DB_USER: ${DB_USER:-v2r}
+      DB_PASSWORD: ${DB_PASSWORD:-v2r_password}
+      # AWS 설정
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # S3 설정
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      S3_EVIDENCE_PREFIX: ${S3_EVIDENCE_PREFIX:-evidence/}
+      # LLM 설정
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
+      # 스캐닝 설정
+      SCAN_TIMEOUT: ${SCAN_TIMEOUT:-300}
+      MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-5}
+      # Python 설정
+      PYTHONPATH: /app
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - .:/app
+      - ./evidence:/app/evidence
+      - scanner_cache:/root/.cache/nuclei
+    ports:
+      - "8501:8501"  # Streamlit (예정)
+      - "8000:8000"  # API 서버 (예정)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - v2r-network
+    command: tail -f /dev/null  # 개발 모드: 대기 상태
+
+  # 스캐너 전용 컨테이너 (선택)
+  scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: v2r-scanner
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-v2r}
+      DB_USER: ${DB_USER:-v2r}
+      DB_PASSWORD: ${DB_PASSWORD:-v2r_password}
+    volumes:
+      - .:/app
+      - ./evidence:/app/evidence
+      - scanner_cache:/root/.cache/nuclei
+    networks:
+      - v2r-network
+    profiles:
+      - scanner  # 필요 시만 실행: docker-compose --profile scanner up scanner
+
+volumes:
+  postgres_data:
+    driver: local
+  scanner_cache:
+    driver: local
+
+networks:
+  v2r-network:
+    driver: bridge
+

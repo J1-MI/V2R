@@ -1,0 +1,57 @@
+# 개발 환경용 Dockerfile
+# 핫 리로드 및 개발 도구 포함
+
+FROM continuumio/miniconda3:latest
+
+WORKDIR /app
+
+# 개발 도구 포함
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    wget \
+    git \
+    vim \
+    nmap \
+    postgresql-client \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Conda 환경 설정
+RUN conda update -n base -c defaults conda && \
+    conda install -y python=3.11 && \
+    conda clean -afy
+
+# 개발용 Python 패키지 추가
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    black \
+    flake8 \
+    ipython \
+    ipdb && \
+    pip list --format=freeze > /tmp/installed_packages.txt && \
+    echo "Installed packages:" && cat /tmp/installed_packages.txt | head -30
+
+# Nuclei 설치
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        wget -q -O - https://raw.githubusercontent.com/projectdiscovery/nuclei/main/install.sh | bash && \
+        mv /root/go/bin/nuclei /usr/local/bin/nuclei && \
+        nuclei -update-templates; \
+    fi
+
+# 환경 변수
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=development
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 개발 모드 (코드 마운트)
+# docker-compose에서 볼륨 마운트 사용
+
+# 기본 명령어
+CMD ["tail", "-f", "/dev/null"]  # 개발 서버는 docker-compose에서 실행
+

@@ -1,0 +1,25 @@
+# 프로덕션 환경용 Docker Compose 오버라이드
+# 사용법: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile  # 프로덕션 Dockerfile 사용
+    restart: unless-stopped
+    environment:
+      # 프로덕션 환경 변수는 .env.prod에서 로드
+      FLASK_ENV: production
+    volumes:
+      # 프로덕션에서는 코드 마운트 제거 (이미지에 포함)
+      - ./evidence:/app/evidence:ro
+    command: python -m src.dashboard.app  # 실제 애플리케이션 실행
+
+  postgres:
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # 백업 설정 추가 가능
+
