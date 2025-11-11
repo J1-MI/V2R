@@ -67,11 +67,11 @@ echo "Starting scan for $TARGET at $(date)"
 
 # Nmap 스캔
 echo "Running Nmap..."
-nmap -sV -sC -oA "$RESULTS_DIR/nmap_${TIMESTAMP}" "$TARGET"
+nmap -sV -sC -oA "$RESULTS_DIR/nmap_$${TIMESTAMP}" "$TARGET"
 
 # Nuclei 스캔
 echo "Running Nuclei..."
-nuclei -u "$TARGET" -o "$RESULTS_DIR/nuclei_${TIMESTAMP}.json" -json
+nuclei -u "$TARGET" -o "$RESULTS_DIR/nuclei_$${TIMESTAMP}.json" -json
 
 echo "Scan completed at $(date)"
 EOF

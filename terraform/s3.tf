@@ -49,6 +49,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
     id     = "delete-old-evidence"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = 30  # 테스트 후 조정 가능
     }

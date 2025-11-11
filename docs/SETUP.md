@@ -208,6 +208,17 @@ pip install awscli
 aws configure
 ```
 
+#### Windows PATH 설정 (예: `C:\Terraform`)
+- Terraform 실행 파일(`terraform.exe`)을 `C:\Terraform` 등에 두었다면, 시스템 환경 변수 또는 PowerShell 세션에 경로를 추가해야 합니다.
+```powershell
+# PowerShell 세션에서 임시로 PATH 추가
+$env:Path = "C:\Terraform;" + $env:Path
+
+# 버전 확인
+terraform -version
+```
+- 영구 설정은 **시스템 속성 → 고급 → 환경 변수 → Path**에 `C:\Terraform`을 추가하세요.
+
 ### SSH 키 생성
 ```bash
 cd terraform/keys
@@ -219,6 +230,12 @@ ssh-keygen -t rsa -b 4096 -f id_rsa -N ""
 cd terraform
 terraform init
 ```
+
+### Terraform 구성 검증
+```bash
+terraform validate
+```
+> **팁:** `terraform validate`가 실패한다면 에러 메시지를 확인하여 변수(`instance_ami` 등) 설정 여부나 스크립트 문법을 점검하세요.
 
 ## 6. 개발 환경 테스트
 
@@ -260,6 +277,7 @@ if db.test_connection():
 
 환경 설정이 완료되면 다음을 진행하세요:
 1. Terraform으로 AWS 인프라 배포 (Week 1)
+   - 세부 절차는 `docs/AWS_EC2_GUIDE.md`를 참고하세요.
 2. 스캐너 통합 테스트
 3. PoC 재현 엔진 개발 시작 (Week 2)
 

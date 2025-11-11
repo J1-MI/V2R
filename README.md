@@ -62,66 +62,11 @@ graph TD
 - ✅ **구현 완료**: 스캐너 실행, 정규화, DB 저장
 - 🟡 **진행 예정**: PoC 재현, 신뢰도 판정, ML/LLM, 리포트 생성
 
-**지원자 유의사항:** 프로젝트 자체 난이도가 어느 정도 높다고 판단되어, 학업 또는 취업으로 인해 프로젝트에 집중하기 어려운 경우에는 한번 더 고민 해보시길 부탁 드립니다.
-
 **프로젝트 특성:** 1인 개발 프로젝트로 진행됩니다.
 
-**최종 수정 일자:** 2025-11-01 (진행 상황 업데이트)
+**최종 수정 일자:** 2025-11-11 (Terraform 검증 및 문서 업데이트)
 
-## 추가 및 변경 내용
-
-### 2025-11-01 업데이트
-1. **프로젝트 구조 초기화**: 프로젝트 기본 구조 및 디렉토리 생성 완료
-2. **Terraform 인프라 코드**: AWS VPC, EC2, S3 인프라 구성 코드 작성 완료
-   - VPC/서브넷/보안그룹 구성 (의도적 취약 설정 포함)
-   - 웹 서버 및 스캐너 EC2 인스턴스 구성
-   - S3 증거 저장소 설정
-   - DVWA/Juice Shop 배포용 user_data 스크립트
-3. **스캐너 모듈 구현**: Nmap 및 Nuclei 스캐너 통합 완료
-   - Nmap 스캐너 래퍼 클래스 (포트 스캔, 버전 탐지)
-   - Nuclei 스캐너 통합 (CVE 템플릿 기반 스캔)
-   - 스캔 결과 정규화 모듈 (공통 JSON 스키마)
-4. **데이터베이스 연결 모듈**: PostgreSQL 연결 및 스키마 관리 구현
-   - 데이터베이스 연결 관리 클래스
-   - 스키마 자동 생성 기능
-5. **Docker 환경 마이그레이션**: 개발/프로덕션 환경 통합
-   - Dockerfile (프로덕션), Dockerfile.dev (개발)
-   - docker-compose.yml (PostgreSQL 통합)
-   - Makefile을 통한 편의 명령어 제공
-6. **개발 환경 문서화**: SETUP.md 및 README_DOCKER.md 작성
-7. **의존성 패키지 관리**: Python 패키지 의존성 명시 및 Docker 자동 설치
-   - **주요 의존성 패키지:**
-     - **AWS SDK**: boto3, botocore
-     - **네트워크 스캐닝**: python-nmap, requests
-     - **데이터 처리**: pandas, numpy
-     - **데이터베이스**: sqlalchemy, psycopg2-binary
-     - **ML/LLM**: openai, scikit-learn, xgboost
-     - **리포트 생성**: python-docx, reportlab
-     - **웹 대시보드**: streamlit
-     - **유틸리티**: python-dotenv, pyyaml, jinja2
-     - **테스트**: pytest, pytest-cov
-   - 모든 패키지는 `requirements.txt`에 명시되어 있으며, Docker 이미지 빌드 시 자동 설치됨
-8. **데이터베이스 ORM 모델 구현**: SQLAlchemy 기반 데이터 모델 정의
-   - ScanResult, POCMetadata, POCReproduction, Event, Report 모델
-   - 모든 모델에 to_dict() 메서드 포함
-9. **데이터베이스 저장소 패턴**: Repository 패턴으로 데이터 접근 계층 구현
-   - ScanResultRepository: 스캔 결과 CRUD 및 통계
-   - POCMetadataRepository: PoC 메타데이터 관리
-   - POCReproductionRepository: PoC 재현 결과 관리
-10. **스캐너 파이프라인 통합**: 전체 워크플로우 자동화
-    - ScannerPipeline 클래스: 스캔 → 정규화 → DB 저장 자동화
-    - Nmap/Nuclei 스캔 파이프라인 통합
-    - 전체 스캔 (Full Scan) 기능: Nmap + Nuclei 통합 실행
-    - 자동 심각도 계산 및 CVE 추출
-11. **통합 테스트 스크립트**: 파이프라인 검증을 위한 테스트 도구 제공
-
-### 초기 계획 (2025-10-24)
-1. **EC2 취약 테스트 서버(예시 취약 앱)** 배포: 의도적으로 RCE가 가능한 예시 CVE를 포함한 웹페이지와 함께, MySQL/SSH 포트 외부 노출 등의 취약 설정을 포함합니다. (예시 CVE는 식별자 형태로만 기재; exploit 코드는 포함하지 않습니다.)  
-2. **외부 스캐닝 절차** 명확화: 네트워크 스캔(Nmap 등), CVE 스캔(Nuclei/OpenVAS/Trivy), DAST(OWASP ZAP 등) 순서로 실행합니다.  
-3. **CCE 기반 서버 점검 스크립트** 추가: 금융보안원 전자금융기반시설 보안 취약점 평가기준(서버: Linux 항목)을 기준으로 점검 스크립트를 작성합니다. IF-구조로 양호/취약 판정 → 결과는 JSON 또는 XML로 출력합니다.  
-4. **Ansible 플레이북** 제공 계획: EC2 전체에 대해 점검 스크립트를 배포·실행·결과 수집할 수 있도록 Ansible 플레이북을 준비합니다.
-
----
+- 상세 변경 이력은 `CHANGELOG.md`를 참고하세요.
 
 ## 목차
 - [1. 기획 의도 및 목표](#1-기획-의도-및-목표)  
