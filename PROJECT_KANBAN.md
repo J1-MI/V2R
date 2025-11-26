@@ -176,6 +176,30 @@
   - [x] Nmap/Nuclei 스캔 파이프라인
   - [x] 전체 스캔 (Full Scan) 기능
   - [x] 통합 테스트 스크립트 (scripts/test/test_pipeline.py)
+- [x] PoC 격리 재현 엔진 구현
+  - [x] Docker 격리 환경 (`src/poc/isolation.py`)
+  - [x] PoC 재현 로직 (`src/poc/reproduction.py`)
+  - [x] 증거 수집 모듈 (`src/poc/evidence.py`)
+  - [x] PoC 파이프라인 통합 (`src/pipeline/poc_pipeline.py`)
+- [x] PoC 신뢰도 점수화 구현
+  - [x] 신뢰도 점수화 모듈 (`src/verification/reliability.py`)
+  - [x] 출처 및 증거 기반 점수 계산
+- [x] LLM 리포트 생성 구현
+  - [x] OpenAI API 연동 (`src/llm/report_generator.py`)
+  - [x] Executive Summary 생성
+- [x] 리포트 자동화 구현
+  - [x] DOCX 리포트 생성 (`src/report/generator.py`)
+  - [x] PR 템플릿 생성 (`src/report/pr_template.py`)
+- [x] Streamlit 대시보드 구현
+  - [x] 웹 대시보드 (`src/dashboard/app.py`)
+  - [x] 취약점 리스트, 신뢰도 표시, 리포트 생성 기능
+- [x] EC2 배포 가이드 작성
+  - [x] 배포 가이드 문서 (`docs/DEPLOYMENT_EC2.md`)
+  - [x] 자동 배포 스크립트
+  - [x] EC2 초기 설정 스크립트
+- [x] 프로젝트 진행률 분석 및 문서화
+  - [x] 진행률 분석 문서 (`docs/PROGRESS_ANALYSIS.md`)
+  - [x] 최종 브리핑 문서 (`docs/FINAL_BRIEFING.md`)
 
 ---
 
