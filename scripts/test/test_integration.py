@@ -119,7 +119,7 @@ sys.exit(0)
         logger.info("\n[5/6] 리포트 생성")
         report_generator = ReportGenerator()
         
-        # 스캔 결과 조회
+        # 스캔 결과 조회 (세션 내에서 to_dict() 호출)
         with db.get_session() as session:
             from src.database.repository import ScanResultRepository, POCReproductionRepository
             scan_repo = ScanResultRepository(session)
@@ -127,11 +127,15 @@ sys.exit(0)
             
             scan_results = scan_repo.get_recent(days=7, limit=10)
             poc_reproductions = poc_repo.get_successful_reproductions()
+            
+            # 세션 내에서 to_dict() 호출하여 detached instance 오류 방지
+            scan_results_dict = [s.to_dict() for s in scan_results]
+            poc_reproductions_dict = [p.to_dict() for p in poc_reproductions]
         
         report_result = report_generator.generate_report(
             report_id=f"test_report_{Path(__file__).stem}",
-            scan_results=[s.to_dict() for s in scan_results],
-            poc_reproductions=[p.to_dict() for p in poc_reproductions]
+            scan_results=scan_results_dict,
+            poc_reproductions=poc_reproductions_dict
         )
         
         if report_result.get("success"):

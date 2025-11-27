@@ -64,12 +64,11 @@ graph TD
 
 **프로젝트 특성:** 1인 개발 프로젝트로 진행됩니다.
 
-**최종 수정 일자:** 2025-01-XX (1주일 완성 계획 구현 완료)
+**최종 수정 일자:** 2025-11-27
 
 - 상세 변경 이력은 `CHANGELOG.md`를 참고하세요.
-- **EC2 배포 가이드**: `docs/DEPLOYMENT_EC2.md` 참조
-- **빠른 시작**: `QUICK_START_EC2.md` 참조
-- **프로젝트 진행률**: `docs/PROGRESS_ANALYSIS.md` 참조
+- **EC2 빠른 시작**: `EC2_QUICK_START.md`
+- **EC2 배포 가이드**: `docs/DEPLOYMENT_EC2.md`
 
 ## 목차
 - [1. 기획 의도 및 목표](#1-기획-의도-및-목표)  

@@ -18,8 +18,12 @@ logger = logging.getLogger(__name__)
 class POCPipeline:
     """PoC 재현 파이프라인 클래스"""
 
-    def __init__(self):
-        self.reproducer = POCReproducer()
+    def __init__(self, allow_docker_failure: bool = True):
+        """
+        Args:
+            allow_docker_failure: Docker 실패 시 예외 없이 계속 진행 (테스트 환경용)
+        """
+        self.reproducer = POCReproducer(allow_docker_failure=allow_docker_failure)
         self.evidence_collector = None
 
     def run_poc_reproduction(
