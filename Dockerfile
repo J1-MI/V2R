@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     nmap \
     postgresql-client \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Conda 환경 설정
@@ -36,11 +37,17 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip list --format=freeze > /tmp/installed_packages.txt && \
     echo "Installed packages:" && cat /tmp/installed_packages.txt | head -20
 
-# Nuclei 설치 (보안 스캐너)
+# Nuclei 설치 (보안 스캐너) - 직접 바이너리 다운로드 방식
 RUN if [ "$(uname -m)" = "x86_64" ]; then \
-        wget -q -O - https://raw.githubusercontent.com/projectdiscovery/nuclei/main/install.sh | bash && \
-        mv /root/go/bin/nuclei /usr/local/bin/nuclei && \
-        nuclei -update-templates; \
+        # 최신 Nuclei 바이너리 다운로드 (v3.2.0)
+        NUCLEI_VERSION="v3.2.0" && \
+        wget -q https://github.com/projectdiscovery/nuclei/releases/download/${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip && \
+        unzip -q nuclei_${NUCLEI_VERSION}_linux_amd64.zip -d /tmp && \
+        mv /tmp/nuclei /usr/local/bin/nuclei && \
+        chmod +x /usr/local/bin/nuclei && \
+        rm -f nuclei_${NUCLEI_VERSION}_linux_amd64.zip && \
+        # 템플릿 업데이트 (선택적, 실패해도 계속 진행)
+        nuclei -update-templates || echo "Warning: Failed to update nuclei templates"; \
     fi
 
 # 프로젝트 파일 복사
