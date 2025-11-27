@@ -54,6 +54,25 @@ class POCPipeline:
         logger.info(f"Starting PoC reproduction pipeline: scan_result_id={scan_result_id}")
 
         try:
+            # 0. target_host가 None이면 스캔 결과에서 자동으로 추출
+            if target_host is None:
+                db = get_db()
+                with db.get_session() as session:
+                    from src.database.models import ScanResult
+                    scan_result = session.query(ScanResult).filter(
+                        ScanResult.id == scan_result_id
+                    ).first()
+                    if scan_result:
+                        target_host = scan_result.target_host
+                        logger.info(f"Auto-extracted target_host from scan result: {target_host}")
+                    else:
+                        logger.warning(f"Scan result not found (ID: {scan_result_id}), using empty string for target_host")
+                        target_host = ""
+            
+            # target_host가 여전히 None이면 빈 문자열로 변환
+            if target_host is None:
+                target_host = ""
+            
             # 1. PoC 재현 실행
             reproduction_result = self.reproducer.reproduce(
                 poc_script=poc_script,
@@ -94,7 +113,7 @@ class POCPipeline:
                     "reproduction_id": reproduction_id,
                     "poc_id": poc_metadata_id,
                     "scan_result_id": scan_result_id,
-                    "target_host": target_host or reproduction_result.get("target_host", ""),
+                    "target_host": target_host or reproduction_result.get("target_host") or "",
                     "reproduction_timestamp": datetime.fromisoformat(
                         reproduction_result.get("timestamp", datetime.now().isoformat())
                     ),

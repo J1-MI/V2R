@@ -75,6 +75,7 @@ print("Test PoC execution")
 sys.exit(0)
 """
         
+        # target_host는 자동으로 스캔 결과에서 추출됨 (명시적으로 전달하지 않아도 됨)
         poc_result = poc_pipeline.run_poc_reproduction(
             scan_result_id=scan_result_id,
             poc_script=test_poc_script,
@@ -82,6 +83,7 @@ sys.exit(0)
             cve_id="CVE-TEST-2024-0001",
             source="test",
             collect_evidence=False  # 증거 수집은 시간이 오래 걸릴 수 있음
+            # target_host는 자동 추출됨
         )
         
         if poc_result.get("success"):

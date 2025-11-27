@@ -117,6 +117,104 @@ services:
 EOF
 docker-compose up -d
 
+# Text4shell 취약 웹앱 배포
+if [ -f "/opt/text4shell-app/text4shell_app.sh" ]; then
+    bash /opt/text4shell-app/text4shell_app.sh
+else
+    # 인라인으로 Text4shell 앱 설정 (간단 버전)
+    apt-get install -y openjdk-17-jdk maven
+    mkdir -p /opt/text4shell-app
+    cd /opt/text4shell-app
+    
+    # 간단한 취약 Java 앱 (Spring Boot 없이)
+    cat > Text4ShellTest.java << 'JAVAEOF'
+import org.apache.commons.text.StringSubstitutor;
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class Text4ShellTest {
+    public static void main(String[] args) throws Exception {
+        ServerSocket server = new ServerSocket(8080);
+        System.out.println("Text4shell vulnerable server started on port 8080");
+        
+        while (true) {
+            Socket client = server.accept();
+            new Thread(() -> {
+                try {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
+                    PrintWriter out = new PrintWriter(client.getOutputStream(), true);
+                    
+                    String request = in.readLine();
+                    if (request != null && request.contains("GET")) {
+                        String response = "HTTP/1.1 200 OK\r\n\r\n";
+                        response += "<html><body>";
+                        response += "<h1>Text4shell Test</h1>";
+                        response += "<p>Use: ?input=${script:javascript:java.lang.Runtime.getRuntime().exec('id')}</p>";
+                        
+                        // 쿼리 파라미터 추출
+                        if (request.contains("input=")) {
+                            String input = request.substring(request.indexOf("input=") + 6);
+                            input = input.split(" ")[0];
+                            input = URLDecoder.decode(input, "UTF-8");
+                            
+                            // 취약한 문자열 보간
+                            StringSubstitutor sub = new StringSubstitutor();
+                            String result = sub.replace(input);
+                            response += "<p>Result: " + result + "</p>";
+                        }
+                        
+                        response += "</body></html>";
+                        out.println(response);
+                    }
+                    client.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+        }
+    }
+}
+JAVAEOF
+    
+    # Maven 프로젝트 생성
+    mkdir -p src/main/java
+    mv Text4ShellTest.java src/main/java/
+    
+    cat > pom.xml << 'EOF'
+<?xml version="1.0"?>
+<project>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.v2r</groupId>
+    <artifactId>text4shell</artifactId>
+    <version>1.0</version>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.9</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+EOF
+    
+    mvn compile exec:java -Dexec.mainClass="Text4ShellTest" > /var/log/text4shell.log 2>&1 &
+    echo "Text4shell app started on port 8080"
+fi
+
 # Apache VirtualHost 설정
 cat > /etc/apache2/sites-available/dvwa.conf << 'EOF'
 <VirtualHost *:80>

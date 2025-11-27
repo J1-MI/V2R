@@ -123,6 +123,15 @@ resource "aws_security_group" "web_server" {
     description = "MySQL (의도적 외부 노출 - 테스트용)"
   }
 
+  # Text4shell 앱 (의도적 외부 노출 - 테스트용)
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Text4shell App (의도적 외부 노출 - 테스트용)"
+  }
+
   # 모든 아웃바운드 허용
   egress {
     from_port   = 0
