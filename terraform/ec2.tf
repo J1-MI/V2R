@@ -12,9 +12,7 @@ resource "aws_instance" "web_server" {
     encrypted   = true
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data/web_server.sh", {
-    project_name = var.project_name
-  }))
+  user_data = base64encode(file("${path.module}/user_data/web_server.sh"))
 
   tags = merge(
     var.tags,
@@ -40,9 +38,7 @@ resource "aws_instance" "scanner" {
     encrypted   = true
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data/scanner.sh", {
-    project_name = var.project_name
-  }))
+  user_data = base64encode(file("${path.module}/user_data/scanner.sh"))
 
   tags = merge(
     var.tags,

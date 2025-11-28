@@ -1,0 +1,77 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # 수동 실행도 가능
+
+jobs:
+  deploy:
+    name: Deploy to EC2 Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
+            set -e
+            echo "=========================================="
+            echo "EC2 서버에 배포 시작"
+            echo "=========================================="
+            
+            # 프로젝트 디렉토리로 이동
+            cd V2R || { echo "V2R 디렉토리를 찾을 수 없습니다"; exit 1; }
+            
+            # 현재 브랜치 확인
+            echo "현재 브랜치: $(git branch --show-current)"
+            
+            # Git pull
+            echo "Git pull 실행 중..."
+            git fetch origin
+            git reset --hard origin/main
+            git pull origin main
+            
+            # 변경사항 확인
+            echo "최근 커밋:"
+            git log -1 --oneline
+            
+            echo "=========================================="
+            echo "배포 완료"
+            echo "=========================================="
+          ENDSSH
+      
+      - name: Restart Docker Services (Optional)
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
+            set -e
+            echo "Docker 서비스 재시작 중..."
+            cd V2R
+            
+            # Docker Compose가 실행 중이면 재시작
+            if [ -f docker-compose.yml ]; then
+              docker-compose down
+              docker-compose up -d --build
+              echo "Docker 서비스 재시작 완료"
+            else
+              echo "docker-compose.yml 파일을 찾을 수 없습니다"
+            fi
+          ENDSSH
+        continue-on-error: true  # Docker가 없어도 실패하지 않도록
+

@@ -1,0 +1,63 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:  # 수동 실행만 (보안상 자동 실행 비활성화)
+    inputs:
+      action:
+        description: 'Terraform action (plan/apply/destroy)'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Terraform ${{ github.event.inputs.action }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          # EC2 서버에서 Terraform 실행
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << ENDSSH
+            set -e
+            cd V2R/terraform
+            
+            export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+            export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+            export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}"
+            
+            terraform init
+            
+            if [ "${{ github.event.inputs.action }}" = "plan" ]; then
+              terraform plan
+            elif [ "${{ github.event.inputs.action }}" = "apply" ]; then
+              terraform apply -auto-approve
+            elif [ "${{ github.event.inputs.action }}" = "destroy" ]; then
+              terraform destroy -auto-approve
+            fi
+          ENDSSH
+
