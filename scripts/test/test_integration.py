@@ -13,6 +13,7 @@ sys.path.insert(0, str(project_root))
 
 from src.pipeline.scanner_pipeline import ScannerPipeline
 from src.pipeline.poc_pipeline import POCPipeline
+from src.pipeline.priority_pipeline import PriorityPipeline
 from src.verification import ReliabilityScorer
 from src.report import ReportGenerator
 from src.database import get_db, initialize_database
@@ -117,8 +118,20 @@ sys.exit(0)
         
         logger.info(f"✓ 신뢰도 점수: {reliability_score}/100")
 
-        # 5. 리포트 생성
-        logger.info("\n[5/6] 리포트 생성")
+        # 5. 우선순위 계산
+        logger.info("\n[5/7] 우선순위 계산")
+        priority_pipeline = PriorityPipeline()
+        priority_result = priority_pipeline.calculate_priorities_for_scans([scan_result_id])
+        
+        if priority_result.get("success"):
+            logger.info(f"✓ 우선순위 계산 완료: {priority_result.get('processed', 0)}개 처리")
+            for result in priority_result.get("results", []):
+                logger.info(f"  - {result.get('scan_id')}: 우선순위 {result.get('priority')} (점수: {result.get('priority_score')})")
+        else:
+            logger.warning(f"우선순위 계산 실패: {priority_result.get('error')}")
+        
+        # 6. 리포트 생성
+        logger.info("\n[6/7] 리포트 생성")
         report_generator = ReportGenerator()
         
         # 스캔 결과 조회 (세션 내에서 to_dict() 호출)
@@ -145,8 +158,8 @@ sys.exit(0)
         else:
             logger.warning(f"리포트 생성 실패: {report_result.get('error')}")
 
-        # 6. 대시보드 확인
-        logger.info("\n[6/6] 대시보드 확인")
+        # 7. 대시보드 확인
+        logger.info("\n[7/7] 대시보드 확인")
         logger.info("✓ 대시보드 모듈 로드 확인")
         logger.info("  실행 방법: streamlit run src/dashboard/app.py")
 

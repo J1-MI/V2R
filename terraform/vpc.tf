@@ -110,8 +110,8 @@ resource "aws_security_group" "web_server" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_cidr]
-    description = "SSH (의도적 외부 노출)"
+    cidr_blocks = ["0.0.0.0/0"]  # 모든 IP에서 접근 허용 (테스트용)
+    description = "SSH (의도적 외부 노출 - 테스트용)"
   }
 
   # MySQL (의도적 외부 노출 - 테스트용)
