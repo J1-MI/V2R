@@ -221,14 +221,24 @@ else:
     logger.info("=" * 60)
     logger.info("✓ 데이터베이스 연결: 성공")
     logger.info(f"✓ 스캔 실행: 성공 (ID: {scan_result_id})")
-    logger.info(f"✓ PoC 재현: {'성공' if poc_result.get('success') else '실패'}")
+    
+    # PoC 재현 결과 요약
+    text4shell_success = text4shell_result.get("success", False)
+    command_injection_success = command_injection_result.get("success", False)
+    
+    logger.info(f"✓ Text4shell PoC 재현: {'성공' if text4shell_success else '실패'}")
+    logger.info(f"✓ Command Injection PoC 재현: {'성공' if command_injection_success else '실패'}")
+    
+    overall_success = text4shell_success or command_injection_success
+    logger.info(f"✓ 전체 PoC 재현: {'성공' if overall_success else '일부 실패'}")
+    
     logger.info("")
     logger.info("다음 단계:")
     logger.info("  1. 대시보드에서 결과 확인: streamlit run src/dashboard/app.py")
     logger.info("  2. 리포트 생성: 대시보드에서 리포트 생성 버튼 클릭")
     logger.info("=" * 60)
     
-    return True
+    return overall_success
 
 
 if __name__ == "__main__":

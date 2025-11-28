@@ -44,7 +44,7 @@ services:
       S3_EVIDENCE_PREFIX: ${S3_EVIDENCE_PREFIX:-evidence/}
       # LLM 설정
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-nano}
       # 스캐닝 설정
       SCAN_TIMEOUT: ${SCAN_TIMEOUT:-300}
       MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-5}

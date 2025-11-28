@@ -94,7 +94,7 @@ S3_EVIDENCE_PREFIX=evidence/
 
 # LLM 설정 (선택, 테스트 시에는 없어도 됨)
 OPENAI_API_KEY=
-LLM_MODEL=gpt-4
+LLM_MODEL=gpt-4.1-nano
 
 # 스캐닝 설정
 SCAN_TIMEOUT=300

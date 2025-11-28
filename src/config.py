@@ -30,7 +30,7 @@ S3_EVIDENCE_PREFIX = os.getenv("S3_EVIDENCE_PREFIX", "evidence/")
 
 # LLM 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-nano")
 
 # 스캐닝 설정
 SCAN_TIMEOUT = int(os.getenv("SCAN_TIMEOUT", "300"))  # 5분
