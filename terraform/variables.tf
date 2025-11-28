@@ -58,6 +58,12 @@ variable "allowed_ssh_cidr" {
   default     = "0.0.0.0/0"  # 보안상 실제 IP로 제한 권장
 }
 
+variable "create_s3_bucket" {
+  description = "S3 버킷 생성 여부 (IAM 역할에 S3 권한이 있는 경우만)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "공통 태그"
   type        = map(string)
