@@ -70,13 +70,13 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# SSH 키 페어 (생성 또는 기존 키 사용)
-# 주의: keys/id_rsa.pub 파일이 존재해야 합니다.
-# 생성 방법: ssh-keygen -t rsa -b 4096 -f keys/id_rsa -N ""
+# SSH 키 페어 (선택적 - keys/id_rsa.pub 파일이 있는 경우만)
+# 키가 없으면 EC2 인스턴스는 키 없이 생성됩니다
+# 생성 방법: mkdir -p keys && ssh-keygen -t rsa -b 4096 -f keys/id_rsa -N ""
 resource "aws_key_pair" "main" {
-  count      = fileexists("${path.module}/keys/id_rsa.pub") ? 1 : 0
+  count      = local.has_ssh_key ? 1 : 0
   key_name   = "${var.project_name}-${var.environment}-key"
-  public_key = file("${path.module}/keys/id_rsa.pub")
+  public_key = local.ssh_public_key
   
   tags = merge(
     var.tags,
@@ -85,4 +85,3 @@ resource "aws_key_pair" "main" {
     }
   )
 }
-

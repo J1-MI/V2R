@@ -48,7 +48,8 @@ resource "aws_s3_bucket_public_access_block" "evidence" {
 
 # 수명 주기 정책 (30일 후 자동 삭제 옵션)
 resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
-  bucket = aws_s3_bucket.evidence.id
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.evidence[0].id
 
   rule {
     id     = "delete-old-evidence"
