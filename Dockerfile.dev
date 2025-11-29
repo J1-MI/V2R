@@ -36,7 +36,9 @@ RUN conda update -n base -c defaults conda && \
 # 개발용 Python 패키지 추가
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt && \
+    # xgboost를 제외한 requirements.txt 생성 (GPU 의존성 문제로 인해)
+    grep -v "^xgboost" requirements.txt > /tmp/requirements_no_xgboost.txt && \
+    pip install --no-cache-dir -r /tmp/requirements_no_xgboost.txt && \
     pip install --no-cache-dir \
     pytest \
     pytest-cov \
@@ -44,8 +46,15 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     flake8 \
     ipython \
     ipdb && \
+    # xgboost는 선택적 설치 (실패해도 계속 진행)
+    (pip install --no-cache-dir xgboost 2>&1 | grep -v "nvidia" || echo "Warning: xgboost installation skipped (optional)") && \
     pip list --format=freeze > /tmp/installed_packages.txt && \
-    echo "Installed packages:" && cat /tmp/installed_packages.txt | head -30
+    echo "Installed packages:" && cat /tmp/installed_packages.txt | head -30 && \
+    # 디스크 공간 정리
+    pip cache purge && \
+    rm -rf /tmp/* /var/tmp/* && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Nuclei 설치 (Go 소스에서 빌드)
 RUN ARCH=$(uname -m) && \
