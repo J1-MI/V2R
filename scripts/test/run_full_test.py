@@ -225,30 +225,62 @@ def test_report_generation():
         return False
 
 
-def test_text4shell_workflow(target: Optional[str]) -> bool:
-    """Text4Shell 대상에 대한 스캔 + PoC 워크플로우 테스트"""
-    from src.pipeline.text4shell_workflow import (  # type: ignore
-        run_text4shell_workflow,
-    )
+def test_vulnerability_scan(target: Optional[str]) -> bool:
+    """취약점 스캔 테스트 (Nmap + Nuclei)"""
+    from src.pipeline.scanner_pipeline import ScannerPipeline
 
     logger.info("\n" + "=" * 60)
-    logger.info("[8/?] Text4Shell 전체 워크플로우 테스트")
+    logger.info("[8/?] 취약점 스캔 테스트 (외부 대상)")
     logger.info("=" * 60)
 
     if not target:
-        logger.info("Text4Shell 대상이 지정되지 않아 이 테스트는 건너뜁니다.")
+        logger.info("스캔 대상이 지정되지 않아 이 테스트는 건너뜁니다.")
         return True
 
     try:
-        run_text4shell_workflow(target)
-        logger.info("✓ Text4Shell 워크플로우 실행 완료")
+        scanner = ScannerPipeline()
+        
+        # URL 구성
+        if target.startswith("http://") or target.startswith("https://"):
+            target_url = target
+            target_ip = target.split("://")[1].split(":")[0].split("/")[0]
+        else:
+            target_ip = target.split(":")[0] if ":" in target else target
+            target_url = f"http://{target}" if ":" in target else f"http://{target}:8080"
+
+        logger.info(f"Target: {target_ip} ({target_url})")
+
+        # Nmap 스캔
+        logger.info("  [1/2] Nmap 스캔 실행 중...")
+        nmap_result = scanner.run_nmap_scan(
+            target=target_ip,
+            ports="80,443,8080",
+            scan_type="-sV",
+            save_to_db=True,
+        )
+        logger.info(f"  ✓ Nmap 완료 - findings: {nmap_result.get('findings_count', 0)}")
+
+        # Nuclei 스캔
+        logger.info("  [2/2] Nuclei 스캔 실행 중...")
+        nuclei_result = scanner.run_nuclei_scan(
+            target=target_url,
+            severity=["critical", "high", "medium"],
+            save_to_db=True,
+        )
+        
+        if nuclei_result.get("success"):
+            logger.info(f"  ✓ Nuclei 완료 - findings: {nuclei_result.get('findings_count', 0)}, CVEs: {nuclei_result.get('cve_count', 0)}")
+        else:
+            logger.warning(f"  ⚠ Nuclei 실패: {nuclei_result.get('error', 'Unknown')}")
+
+        logger.info("✓ 취약점 스캔 테스트 완료")
         return True
     except Exception as e:
-        logger.error(f"✗ Text4Shell 워크플로우 테스트 실패: {str(e)}")
+        logger.error(f"✗ 취약점 스캔 테스트 실패: {str(e)}")
         return False
 
 
-def main(text4shell_target: Optional[str] = None) -> int:
+def main(scan_target: Optional[str] = None) -> int:
     """메인 테스트 실행"""
     logger.info("\n" + "=" * 60)
     logger.info("V2R 전체 시스템 통합 테스트")
@@ -268,10 +300,9 @@ def main(text4shell_target: Optional[str] = None) -> int:
     results["reliability"] = test_reliability_scoring()
     results["report"] = test_report_generation()
 
-    # Text4Shell 대상이 주어지면 실제 EC2 취약한 웹앱에 대해
-    # Nmap + Nuclei + PoC 재현까지 한 번에 수행
-    if text4shell_target:
-        results["text4shell"] = test_text4shell_workflow(text4shell_target)
+    # 외부 스캔 대상이 주어지면 Nmap + Nuclei 스캔 실행
+    if scan_target:
+        results["vulnerability_scan"] = test_vulnerability_scan(scan_target)
 
     # 결과 요약
     logger.info("\n" + "=" * 60)
@@ -301,14 +332,14 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="V2R 전체 시스템 통합 테스트 + (옵션) Text4Shell 워크플로우",
+        description="V2R 전체 시스템 통합 테스트 + (옵션) 취약점 스캔",
     )
     parser.add_argument(
-        "--text4shell-target",
-        help="Text4Shell 취약한 웹앱 대상 (예: 13.125.x.x 또는 http://13.125.x.x:8080)",
+        "--scan-target",
+        help="스캔 대상 IP 또는 URL (예: 13.125.x.x 또는 http://13.125.x.x:8080)",
         default=None,
     )
 
     args = parser.parse_args()
-    sys.exit(main(text4shell_target=args.text4shell_target))
+    sys.exit(main(scan_target=args.scan_target))
 

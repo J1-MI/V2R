@@ -86,6 +86,7 @@ services:
     profiles:
       - scanner  # 필요 시만 실행: docker-compose --profile scanner up scanner
 
+
 volumes:
   postgres_data:
     driver: local

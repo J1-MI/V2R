@@ -133,7 +133,18 @@ class ScannerPipeline:
         )
 
         if raw_result.get("status") in ["failed", "timeout"]:
-            error_msg = raw_result.get("error") or raw_result.get("error_output") or "Unknown error"
+            # 에러 메시지 우선순위: error_output > error > exit_code
+            error_output = raw_result.get("error_output", "")
+            error = raw_result.get("error", "")
+            exit_code = raw_result.get("exit_code", "unknown")
+            
+            if error_output:
+                error_msg = error_output.strip()[:500]  # 처음 500자만
+            elif error:
+                error_msg = error
+            else:
+                error_msg = f"Exit code {exit_code}"
+            
             logger.error(f"Nuclei scan failed: {error_msg}")
             return {
                 "success": False,
@@ -144,7 +155,8 @@ class ScannerPipeline:
                 "findings_count": 0,
                 "cve_count": 0,
                 "severity": "Unknown",
-                "saved_to_db": False
+                "saved_to_db": False,
+                "exit_code": exit_code
             }
 
         # 2. 정규화

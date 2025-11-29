@@ -164,14 +164,23 @@ class NucleiScanner:
                 "exit_code": result.returncode
             }
 
-            # stderr가 있으면 로깅 (디버깅용)
+            # stderr와 stdout 모두 로깅 (디버깅용)
             if result.stderr:
-                logger.warning(f"Nuclei stderr (exit code {result.returncode}): {result.stderr[:500]}")  # 처음 500자만
+                logger.warning(f"Nuclei stderr (exit code {result.returncode}): {result.stderr}")
+            elif result.returncode != 0:
+                # stderr가 없어도 exit code가 0이 아니면 stdout을 확인
+                logger.warning(f"Nuclei stdout (exit code {result.returncode}): {result.stdout[:500]}")
             
             if status == "completed":
                 logger.info(f"Nuclei scan completed: {target}, findings={len(findings)}, exit_code={result.returncode}")
             else:
-                error_msg = result.stderr[:200] if result.stderr else f"Exit code {result.returncode}"
+                # 에러 메시지 구성
+                if result.stderr:
+                    error_msg = result.stderr.strip()
+                elif result.stdout:
+                    error_msg = result.stdout.strip()[:200]
+                else:
+                    error_msg = f"Exit code {result.returncode}"
                 logger.error(f"Nuclei scan failed: {target}, exit_code={result.returncode}, error={error_msg}")
             
             return scan_result
