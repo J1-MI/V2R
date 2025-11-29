@@ -61,10 +61,28 @@ RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         echo "Installing Nuclei from source for architecture: $ARCH" && \
         cd /tmp && \
-        git clone https://github.com/projectdiscovery/nuclei.git && \
-        cd nuclei/v2/cmd/nuclei && \
-        go build -o nuclei && \
-        mv nuclei /usr/local/bin/nuclei && \
+        git clone --depth 1 https://github.com/projectdiscovery/nuclei.git && \
+        cd nuclei && \
+        # 저장소 구조 확인
+        echo "Checking directory structure..." && \
+        ls -la && \
+        # 여러 가능한 경로 시도
+        if [ -d "cmd/nuclei" ]; then \
+            echo "Building from cmd/nuclei" && \
+            cd cmd/nuclei && \
+            go build -o nuclei . && \
+            mv nuclei /usr/local/bin/nuclei; \
+        elif [ -d "v2/cmd/nuclei" ]; then \
+            echo "Building from v2/cmd/nuclei" && \
+            cd v2/cmd/nuclei && \
+            go build -o nuclei . && \
+            mv nuclei /usr/local/bin/nuclei; \
+        else \
+            echo "Trying to build from root with go build" && \
+            (go build -o /usr/local/bin/nuclei ./cmd/nuclei 2>/dev/null || \
+             go build -o /usr/local/bin/nuclei ./v2/cmd/nuclei 2>/dev/null || \
+             (echo "Error: Cannot find nuclei source. Available directories:" && find . -type d -name "*nuclei*" | head -10 && exit 1)); \
+        fi && \
         chmod +x /usr/local/bin/nuclei && \
         cd / && \
         rm -rf /tmp/nuclei && \
