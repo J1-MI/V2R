@@ -82,7 +82,28 @@ class NucleiScanner:
 
             # 특정 템플릿 파일 지정 (우선순위 높음)
             if template_files:
-                cmd.extend(["-t", ",".join(template_files)])
+                # 템플릿 파일 경로 검증
+                from pathlib import Path
+                valid_templates = []
+                for template_file in template_files:
+                    if Path(template_file).exists():
+                        valid_templates.append(template_file)
+                    else:
+                        logger.warning(f"Template file not found: {template_file}")
+                if valid_templates:
+                    cmd.extend(["-t", ",".join(valid_templates)])
+                    logger.info(f"Using template files: {valid_templates}")
+                else:
+                    logger.error("No valid template files found")
+                    return {
+                        "scan_id": self.scan_id,
+                        "scanner_name": "nuclei",
+                        "scan_timestamp": datetime.now().isoformat(),
+                        "target_host": target,
+                        "status": "failed",
+                        "error": "No valid template files found",
+                        "findings": []
+                    }
             # 템플릿 타입 필터
             elif template_types:
                 cmd.extend(["-t", ",".join(template_types)])
@@ -94,6 +115,8 @@ class NucleiScanner:
             # 템플릿 경로 지정 (템플릿 파일이 절대 경로가 아닌 경우)
             if self.templates_path and not template_files:
                 cmd.extend(["-templates", self.templates_path])
+            
+            logger.info(f"Nuclei command: {' '.join(cmd)}")
 
             # 스캔 실행
             result = subprocess.run(
@@ -131,6 +154,15 @@ class NucleiScanner:
             }
 
             logger.info(f"Nuclei scan completed: {target}, findings={len(findings)}")
+            
+            # stderr가 있으면 로깅 (디버깅용)
+            if result.stderr:
+                logger.debug(f"Nuclei stderr: {result.stderr[:500]}")  # 처음 500자만
+            
+            # exit code가 0이 아니면 경고
+            if result.returncode != 0:
+                logger.warning(f"Nuclei exited with code {result.returncode}, but status marked as completed")
+            
             return scan_result
 
         except subprocess.TimeoutExpired:
