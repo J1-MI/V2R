@@ -244,7 +244,7 @@ def test_vulnerability_scan(target: Optional[str]) -> bool:
         if target.startswith("http://") or target.startswith("https://"):
             target_url = target
             # IP와 포트 추출
-            url_part = target.split("://")[1].split("/")[0]  # 13.125.220.26:8081
+            url_part = target.split("://")[1].split("/")[0]  # 3.36.15.26:8081
             if ":" in url_part:
                 target_ip, port = url_part.split(":")
             else:

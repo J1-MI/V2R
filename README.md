@@ -67,8 +67,9 @@ graph TD
 **최종 수정 일자:** 2025-01-XX (1주일 완성 계획 구현 완료)
 
 - 상세 변경 이력은 `CHANGELOG.md`를 참고하세요.
-- **EC2 배포 가이드**: `docs/DEPLOYMENT_EC2.md` 참조
-- **빠른 시작**: `QUICK_START_EC2.md` 참조
+- **로컬 PC 실행 가이드**: `QUICK_START_LOCAL.md` (권장)
+- **로컬 Docker 설정**: `docs/LOCAL_DOCKER_SETUP.md` 참조
+- **EC2 배포 가이드**: `docs/DEPLOYMENT_EC2.md` 참조 (레거시)
 - **프로젝트 진행률**: `docs/PROGRESS_ANALYSIS.md` 참조
 
 ## 목차

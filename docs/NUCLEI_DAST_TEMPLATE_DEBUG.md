@@ -16,7 +16,7 @@ docker-compose exec app bash
 ls -la /usr/local/bin/nuclei-templates/dast/cves/2022/CVE-2022-42889.yaml
 
 # 직접 실행 (stderr 확인)
-nuclei -u http://13.125.220.26:8080 \
+nuclei -u http://3.36.15.26:8080 \
   -json \
   -rate-limit 150 \
   -t /usr/local/bin/nuclei-templates/dast/cves/2022/CVE-2022-42889.yaml \
@@ -24,7 +24,7 @@ nuclei -u http://13.125.220.26:8080 \
   2>&1
 
 # 또는 더 자세한 디버그 정보
-nuclei -u http://13.125.220.26:8080 \
+nuclei -u http://3.36.15.26:8080 \
   -json \
   -rate-limit 150 \
   -t /usr/local/bin/nuclei-templates/dast/cves/2022/CVE-2022-42889.yaml \
@@ -62,7 +62,7 @@ nuclei -validate -t /usr/local/bin/nuclei-templates/dast/cves/2022/CVE-2022-4288
 DAST 템플릿은 특별한 옵션이 필요할 수 있음:
 ```bash
 # headless 옵션 추가
-nuclei -u http://13.125.220.26:8080 \
+nuclei -u http://3.36.15.26:8080 \
   -t /usr/local/bin/nuclei-templates/dast/cves/2022/CVE-2022-42889.yaml \
   -headless
 ```
@@ -72,7 +72,7 @@ nuclei -u http://13.125.220.26:8080 \
 ```bash
 # 상대 경로로 시도
 cd /usr/local/bin/nuclei-templates
-nuclei -u http://13.125.220.26:8080 \
+nuclei -u http://3.36.15.26:8080 \
   -t dast/cves/2022/CVE-2022-42889.yaml
 ```
 

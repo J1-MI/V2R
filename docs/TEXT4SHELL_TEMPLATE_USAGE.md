@@ -37,13 +37,13 @@ ls -la /usr/local/bin/nuclei-templates/http/cves/2022/ | grep -i "42889\|text4sh
 ```bash
 # 단일 템플릿 파일 사용
 docker-compose exec app nuclei \
-  -u http://13.125.220.26:8080 \
+  -u http://3.36.15.26:8080 \
   -t /usr/local/bin/nuclei-templates/http/cves/2022/CVE-2022-42889.yaml \
   -json
 
 # 여러 템플릿 파일 사용
 docker-compose exec app nuclei \
-  -u http://13.125.220.26:8080 \
+  -u http://3.36.15.26:8080 \
   -t /usr/local/bin/nuclei-templates/http/cves/2022/CVE-2022-42889.yaml,/usr/local/bin/nuclei-templates/http/cves/2022/CVE-2022-42889-alt.yaml \
   -json
 ```
@@ -53,14 +53,14 @@ docker-compose exec app nuclei \
 ```bash
 # 전체 템플릿 디렉토리 사용
 docker-compose exec app nuclei \
-  -u http://13.125.220.26:8080 \
+  -u http://3.36.15.26:8080 \
   -templates /usr/local/bin/nuclei-templates \
   -severity critical,high \
   -json
 
 # 특정 폴더만 사용 (예: CVE 템플릿만)
 docker-compose exec app nuclei \
-  -u http://13.125.220.26:8080 \
+  -u http://3.36.15.26:8080 \
   -templates /usr/local/bin/nuclei-templates/http/cves \
   -json
 ```
@@ -70,14 +70,14 @@ docker-compose exec app nuclei \
 ```bash
 # Text4Shell 태그가 있는 템플릿만 사용
 docker-compose exec app nuclei \
-  -u http://13.125.220.26:8080 \
+  -u http://3.36.15.26:8080 \
   -templates /usr/local/bin/nuclei-templates \
   -tags text4shell \
   -json
 
 # CVE 태그와 특정 CVE ID
 docker-compose exec app nuclei \
-  -u http://13.125.220.26:8080 \
+  -u http://3.36.15.26:8080 \
   -templates /usr/local/bin/nuclei-templates \
   -tags cve \
   -id CVE-2022-42889 \
@@ -99,7 +99,7 @@ scanner = ScannerPipeline(nuclei_templates_path="/custom/path/to/templates")
 
 # 스캔 실행 (템플릿 경로가 자동으로 적용됨)
 result = scanner.run_nuclei_scan(
-    target="http://13.125.220.26:8080",
+    target="http://3.36.15.26:8080",
     severity=["critical", "high"],
     save_to_db=True
 )
@@ -118,7 +118,7 @@ scanner = NucleiScanner(
 
 # 특정 템플릿 파일만 사용
 result = scanner.scan(
-    target="http://13.125.220.26:8080",
+    target="http://3.36.15.26:8080",
     template_types=["/usr/local/bin/nuclei-templates/http/cves/2022/CVE-2022-42889.yaml"]
 )
 ```

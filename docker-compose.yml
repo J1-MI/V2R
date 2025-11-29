@@ -1,4 +1,9 @@
-version: '3.8'
+# V2R 프로젝트 Docker Compose 설정
+# 로컬 PC에서 실행, EC2에서 접속하는 방식
+#
+# 사용법:
+#   로컬 PC: docker-compose up -d
+#   EC2: <로컬PC-공인IP>로 접속
 
 services:
   # PostgreSQL 데이터베이스
@@ -10,7 +15,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-v2r_password}
       POSTGRES_DB: ${DB_NAME:-v2r}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "0.0.0.0:${DB_PORT:-5432}:5432"  # 외부 접근 가능하도록 0.0.0.0 바인딩
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
@@ -56,8 +61,8 @@ services:
       - ./evidence:/app/evidence
       - scanner_cache:/root/.cache/nuclei
     ports:
-      - "8501:8501"  # Streamlit (예정)
-      - "8000:8000"  # API 서버 (예정)
+      - "0.0.0.0:8501:8501"  # Streamlit 대시보드 (외부 접근 가능)
+      - "0.0.0.0:8000:8000"  # API 서버 (외부 접근 가능)
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +90,18 @@ services:
       - v2r-network
     profiles:
       - scanner  # 필요 시만 실행: docker-compose --profile scanner up scanner
+
+  # 취약 환경 (테스트용)
+  # DVWA (Damn Vulnerable Web Application)
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: dvwa
+    ports:
+      - "0.0.0.0:80:80"  # DVWA 웹 인터페이스 (외부 접근 가능)
+    networks:
+      - v2r-network
+    profiles:
+      - test  # 테스트 환경에서만 실행: docker-compose --profile test up dvwa
 
 
 volumes:
