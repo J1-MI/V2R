@@ -115,10 +115,12 @@ def run_text4shell_workflow(target: str, recent_days: int = 1) -> None:
     except Exception as e:
         logger.warning("Nmap 스캔 중 오류(계속 진행): %s", e)
 
-    # 2. Nuclei 스캔 (Text4Shell 취약점 포함 템플릿 사용, 최신 템플릿 기준)
+    # 2. Nuclei 스캔 (Text4Shell 취약점 템플릿 직접 지정)
     logger.info("[2/3] Nuclei 스캔 (취약점 스캔)")
+    text4shell_template = "/usr/local/bin/nuclei-templates/dast/cves/2022/CVE-2022-42889.yaml"
     nuclei_result = scanner.run_nuclei_scan(
         target=target_url,
+        template_files=[text4shell_template],
         severity=["critical", "high"],
         save_to_db=True,
     )

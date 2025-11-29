@@ -45,6 +45,7 @@ class NucleiScanner:
         self,
         target: str,
         template_types: Optional[List[str]] = None,
+        template_files: Optional[List[str]] = None,
         severity: Optional[List[str]] = None,
         rate_limit: int = 150
     ) -> Dict[str, Any]:
@@ -54,6 +55,7 @@ class NucleiScanner:
         Args:
             target: 스캔 대상 URL 또는 IP
             template_types: 스캔할 템플릿 타입 (예: ["cve", "vulnerability"])
+            template_files: 특정 템플릿 파일 경로 리스트 (예: ["/path/to/template.yaml"])
             severity: 심각도 필터 (예: ["critical", "high"])
             rate_limit: 초당 요청 수 제한
 
@@ -78,16 +80,19 @@ class NucleiScanner:
             # Nuclei 명령어 구성
             cmd = [self.nuclei_path, "-u", target, "-json", "-rate-limit", str(rate_limit)]
 
+            # 특정 템플릿 파일 지정 (우선순위 높음)
+            if template_files:
+                cmd.extend(["-t", ",".join(template_files)])
             # 템플릿 타입 필터
-            if template_types:
+            elif template_types:
                 cmd.extend(["-t", ",".join(template_types)])
 
             # 심각도 필터
             if severity:
                 cmd.extend(["-severity", ",".join(severity)])
 
-            # 템플릿 경로 지정
-            if self.templates_path:
+            # 템플릿 경로 지정 (템플릿 파일이 절대 경로가 아닌 경우)
+            if self.templates_path and not template_files:
                 cmd.extend(["-templates", self.templates_path])
 
             # 스캔 실행

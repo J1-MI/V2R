@@ -17,9 +17,15 @@ logger = logging.getLogger(__name__)
 class ScannerPipeline:
     """스캐너 파이프라인 클래스"""
 
-    def __init__(self):
+    def __init__(self, nuclei_templates_path: Optional[str] = None):
+        """
+        Args:
+            nuclei_templates_path: Nuclei 템플릿 경로 (기본값: /usr/local/bin/nuclei-templates)
+        """
         self.nmap_scanner = NmapScanner()
-        self.nuclei_scanner = NucleiScanner()
+        # 템플릿 경로가 지정되지 않으면 기본 경로 사용
+        default_templates_path = nuclei_templates_path or "/usr/local/bin/nuclei-templates"
+        self.nuclei_scanner = NucleiScanner(templates_path=default_templates_path)
         self.normalizer = ScanResultNormalizer()
 
     def run_nmap_scan(
@@ -102,6 +108,7 @@ class ScannerPipeline:
         self,
         target: str,
         severity: Optional[List[str]] = None,
+        template_files: Optional[List[str]] = None,
         save_to_db: bool = True
     ) -> Dict[str, Any]:
         """
@@ -110,6 +117,7 @@ class ScannerPipeline:
         Args:
             target: 스캔 대상 URL
             severity: 심각도 필터 (예: ["critical", "high"])
+            template_files: 특정 템플릿 파일 경로 리스트 (예: ["/path/to/template.yaml"])
             save_to_db: DB 저장 여부
 
         Returns:
@@ -118,7 +126,11 @@ class ScannerPipeline:
         logger.info(f"Starting Nuclei scan pipeline: target={target}")
 
         # 1. 스캔 실행
-        raw_result = self.nuclei_scanner.scan(target, severity=severity)
+        raw_result = self.nuclei_scanner.scan(
+            target,
+            severity=severity,
+            template_files=template_files
+        )
 
         if raw_result.get("status") in ["failed", "timeout"]:
             logger.error(f"Nuclei scan failed: {raw_result.get('error')}")

@@ -88,8 +88,11 @@ RUN ARCH=$(uname -m) && \
         rm -rf /tmp/nuclei && \
         /usr/local/bin/nuclei -version && \
         echo "Nuclei installed successfully" && \
-        /usr/local/bin/nuclei -update-templates && \
-        echo "Nuclei templates updated"; \
+        # 템플릿 직접 다운로드 (update-templates가 동작하지 않는 경우 대비)
+        mkdir -p /usr/local/bin/nuclei-templates && \
+        cd /usr/local/bin/nuclei-templates && \
+        git clone --depth 1 https://github.com/projectdiscovery/nuclei-templates.git . && \
+        echo "Nuclei templates downloaded successfully"; \
     else \
         echo "Warning: Nuclei installation skipped for architecture $ARCH (only x86_64 supported)"; \
     fi
