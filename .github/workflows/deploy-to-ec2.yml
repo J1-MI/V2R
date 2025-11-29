@@ -1,0 +1,32 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+        
+    - name: Deploy to EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          cd ~/V2R
+          git pull origin main
+          docker-compose down
+          docker-compose build --no-cache app
+          docker-compose up -d
+          docker-compose exec -T app python -c "from src.scanner.nuclei_scanner import NucleiScanner; s = NucleiScanner(); print('Nuclei installed:', s._check_nuclei_installed())"
+        EOF
+
