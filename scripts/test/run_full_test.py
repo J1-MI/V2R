@@ -7,6 +7,7 @@
 import sys
 import logging
 from pathlib import Path
+from typing import Optional
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent.parent
@@ -224,42 +225,70 @@ def test_report_generation():
         return False
 
 
-def main():
+def test_text4shell_workflow(target: Optional[str]) -> bool:
+    """Text4Shell 대상에 대한 스캔 + PoC 워크플로우 테스트"""
+    from src.pipeline.text4shell_workflow import (  # type: ignore
+        run_text4shell_workflow,
+    )
+
+    logger.info("\n" + "=" * 60)
+    logger.info("[8/?] Text4Shell 전체 워크플로우 테스트")
+    logger.info("=" * 60)
+
+    if not target:
+        logger.info("Text4Shell 대상이 지정되지 않아 이 테스트는 건너뜁니다.")
+        return True
+
+    try:
+        run_text4shell_workflow(target)
+        logger.info("✓ Text4Shell 워크플로우 실행 완료")
+        return True
+    except Exception as e:
+        logger.error(f"✗ Text4Shell 워크플로우 테스트 실패: {str(e)}")
+        return False
+
+
+def main(text4shell_target: Optional[str] = None) -> int:
     """메인 테스트 실행"""
     logger.info("\n" + "=" * 60)
     logger.info("V2R 전체 시스템 통합 테스트")
     logger.info("=" * 60)
-    
+
     results = {}
-    
+
     # 각 테스트 실행
     results["database"] = test_database_connection()
     results["nmap"] = test_nmap_scanner()
     results["nuclei"] = test_nuclei_scanner()
-    
+
     pipeline_success, scan_id = test_scanner_pipeline()
     results["pipeline"] = pipeline_success
-    
+
     results["poc"] = test_poc_pipeline(scan_id)
     results["reliability"] = test_reliability_scoring()
     results["report"] = test_report_generation()
-    
+
+    # Text4Shell 대상이 주어지면 실제 EC2 취약한 웹앱에 대해
+    # Nmap + Nuclei + PoC 재현까지 한 번에 수행
+    if text4shell_target:
+        results["text4shell"] = test_text4shell_workflow(text4shell_target)
+
     # 결과 요약
     logger.info("\n" + "=" * 60)
     logger.info("테스트 결과 요약")
     logger.info("=" * 60)
-    
+
     total = len(results)
     passed = sum(1 for v in results.values() if v)
-    
+
     for test_name, result in results.items():
         status = "✓ 통과" if result else "✗ 실패"
         logger.info(f"  {test_name:20s}: {status}")
-    
+
     logger.info("\n" + "-" * 60)
     logger.info(f"총 {total}개 테스트 중 {passed}개 통과 ({passed*100//total}%)")
     logger.info("=" * 60)
-    
+
     if passed == total:
         logger.info("🎉 모든 테스트 통과!")
         return 0
@@ -269,5 +298,17 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="V2R 전체 시스템 통합 테스트 + (옵션) Text4Shell 워크플로우",
+    )
+    parser.add_argument(
+        "--text4shell-target",
+        help="Text4Shell 취약한 웹앱 대상 (예: 13.125.x.x 또는 http://13.125.x.x:8080)",
+        default=None,
+    )
+
+    args = parser.parse_args()
+    sys.exit(main(text4shell_target=args.text4shell_target))
 
