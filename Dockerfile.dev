@@ -38,17 +38,21 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     echo "Installed packages:" && cat /tmp/installed_packages.txt | head -30
 
 # Nuclei 설치 (직접 바이너리 다운로드 방식 - 더 안정적)
-RUN if [ "$(uname -m)" = "x86_64" ]; then \
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        echo "Installing Nuclei for architecture: $ARCH" && \
         NUCLEI_VERSION="v3.2.0" && \
+        cd /tmp && \
         wget -q https://github.com/projectdiscovery/nuclei/releases/download/${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip && \
-        unzip -q nuclei_${NUCLEI_VERSION}_linux_amd64.zip -d /tmp && \
-        mv /tmp/nuclei /usr/local/bin/nuclei && \
+        unzip -q nuclei_${NUCLEI_VERSION}_linux_amd64.zip && \
+        mv nuclei /usr/local/bin/nuclei && \
         chmod +x /usr/local/bin/nuclei && \
         rm -f nuclei_${NUCLEI_VERSION}_linux_amd64.zip && \
-        nuclei -version && \
-        nuclei -update-templates || echo "Warning: Failed to update nuclei templates"; \
+        /usr/local/bin/nuclei -version && \
+        echo "Nuclei installed successfully" && \
+        /usr/local/bin/nuclei -update-templates || echo "Warning: Failed to update nuclei templates"; \
     else \
-        echo "Warning: Nuclei installation skipped for architecture $(uname -m)"; \
+        echo "Warning: Nuclei installation skipped for architecture $ARCH (only x86_64 supported)"; \
     fi
 
 # 환경 변수
