@@ -6,10 +6,12 @@
 from .nmap_scanner import NmapScanner
 from .nuclei_scanner import NucleiScanner
 from .normalizer import ScanResultNormalizer
+from .vulnerability_checker import VulnerabilityChecker
 
 __all__ = [
     "NmapScanner",
     "NucleiScanner",
     "ScanResultNormalizer",
+    "VulnerabilityChecker",
 ]
 

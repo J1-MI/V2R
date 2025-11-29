@@ -36,6 +36,9 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
 SCAN_TIMEOUT = int(os.getenv("SCAN_TIMEOUT", "300"))  # 5분
 MAX_CONCURRENT_SCANS = int(os.getenv("MAX_CONCURRENT_SCANS", "5"))
 
+# Nuclei 템플릿 경로 (Docker 내부 경로)
+NUCLEI_TEMPLATES_PATH = os.getenv("NUCLEI_TEMPLATES_PATH", "/usr/local/bin/nuclei-templates")
+
 # 프로젝트 루트 경로
 PROJECT_ROOT = Path(__file__).parent.parent
 

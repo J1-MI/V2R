@@ -21,6 +21,40 @@ V2R 프로젝트 개발 환경을 설정하는 방법을 안내합니다.
 
 ---
 
+## 빠른 시작 (로컬 PC)
+
+로컬 PC에서 V2R Docker 서비스를 빠르게 시작하는 방법:
+
+```bash
+# 1. 프로젝트 디렉토리로 이동
+cd V2R
+
+# 2. Docker 서비스 시작
+docker-compose up -d
+
+# 3. 서비스 확인
+docker-compose ps
+
+# 4. 기본 테스트 실행
+docker-compose exec app python scripts/test/run_full_test.py
+```
+
+**서비스 접속 정보:**
+- **PostgreSQL**: `localhost:5432`
+- **API 서버**: `http://localhost:8000`
+- **대시보드**: `http://localhost:8501`
+- **DVWA** (테스트용): `http://localhost:8080` (`--profile test` 사용 시)
+
+**CVE-Lab 스캔:**
+```powershell
+# PowerShell에서
+.\scripts\scan_cve_lab.ps1
+```
+
+자세한 내용은 아래의 "방법 1: Docker Compose 사용" 섹션을 참고하세요.
+
+---
+
 ## 방법 1: Docker Compose 사용 (권장)
 
 ### 1. Docker 및 Docker Compose 설치

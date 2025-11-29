@@ -47,7 +47,7 @@ class NucleiScanner:
         template_types: Optional[List[str]] = None,
         template_files: Optional[List[str]] = None,
         severity: Optional[List[str]] = None,
-        rate_limit: int = 150
+        rate_limit: int = 500  # 기본값 증가 (300 -> 500, 스캔 속도 향상)
     ) -> Dict[str, Any]:
         """
         대상 호스트 Nuclei 스캔 실행
@@ -72,7 +72,10 @@ class NucleiScanner:
             }
 
         self.target = target
-        self.scan_id = f"nuclei_{target.replace('://', '_').replace('/', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # 밀리초 포함하여 중복 방지
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
+        safe_target = target.replace('://', '_').replace('/', '_').replace(':', '_')
+        self.scan_id = f"nuclei_{safe_target}_{timestamp}"
 
         logger.info(f"Starting Nuclei scan: target={target}")
 
@@ -115,7 +118,14 @@ class NucleiScanner:
 
             # 템플릿 경로 지정 (템플릿 파일이 절대 경로가 아닌 경우)
             if self.templates_path and not template_files:
-                cmd.extend(["-templates", self.templates_path])
+                # 경로 존재 확인
+                from pathlib import Path
+                templates_path_obj = Path(self.templates_path)
+                if templates_path_obj.exists():
+                    cmd.extend(["-templates", self.templates_path])
+                    logger.debug(f"Using templates path: {self.templates_path}")
+                else:
+                    logger.warning(f"Templates path does not exist: {self.templates_path}, skipping -templates flag")
             
             logger.info(f"Nuclei command: {' '.join(cmd)}")
 
@@ -124,7 +134,7 @@ class NucleiScanner:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=600  # 10분 타임아웃
+                timeout=300  # 5분 타임아웃 (속도와 안정성 균형)
             )
 
             # 결과 파싱

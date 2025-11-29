@@ -9,6 +9,46 @@
 
 ## 추천 취약 환경
 
+### DVWA (Damn Vulnerable Web Application) - 가장 추천
+
+**특징:**
+- 다양한 취약점 시나리오 (SQL Injection, XSS, CSRF 등)
+- 난이도 조절 가능 (Low, Medium, High, Impossible)
+- Nuclei 템플릿과 잘 매칭됨
+- 업계 표준 실습 환경
+
+**설치 및 실행:**
+
+```bash
+# 로컬 PC에서 실행 (docker-compose 사용 권장)
+docker-compose --profile test up -d dvwa
+
+# 또는 직접 실행
+docker run -d \
+  --name dvwa \
+  -p 8080:80 \
+  vulnerables/web-dvwa
+
+# 접속 확인
+curl http://localhost:8080
+
+# 기본 계정
+# ID: admin
+# Password: password
+```
+
+**V2R 스캔 실행:**
+
+```bash
+# EC2 퍼블릭 IP 사용 (포트 8080)
+docker-compose exec app python scripts/test/run_full_test.py --scan-target http://3.36.15.26:8080
+
+# 또는 로컬에서 DVWA 컨테이너 이름 사용 (권장)
+docker-compose exec app python scripts/test/run_full_test.py --scan-target http://dvwa:80
+```
+
+## 기타 추천 취약 환경
+
 ### 1. VulnHub (가장 추천)
 
 **VulnHub**는 다양한 취약점을 포함한 가상머신/컨테이너 모음입니다.
@@ -46,18 +86,7 @@ docker run -d --name dvwa \
   vulnerables/web-dvwa
 ```
 
-### 2. DVWA (Damn Vulnerable Web Application)
-
-```bash
-docker run -d --name dvwa \
-  -p 80:80 \
-  vulnerables/web-dvwa
-
-# 접속: http://<EC2-IP>:80
-# 기본 계정: admin / password
-```
-
-### 3. WebGoat
+### 2. WebGoat
 
 ```bash
 docker run -d --name webgoat \

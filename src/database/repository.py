@@ -193,6 +193,12 @@ class POCMetadataRepository:
             POCMetadata.reliability_score >= min_score
         ).order_by(desc(POCMetadata.reliability_score)).all()
 
+    def get_by_id(self, poc_id: str) -> Optional[POCMetadata]:
+        """PoC ID로 메타데이터 조회"""
+        return self.session.query(POCMetadata).filter(
+            POCMetadata.poc_id == poc_id
+        ).first()
+
 
 class POCReproductionRepository:
     """PoC 재현 결과 저장소"""

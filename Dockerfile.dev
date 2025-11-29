@@ -14,9 +14,20 @@ RUN apt-get update && apt-get install -y \
     vim \
     nmap \
     postgresql-client \
+    redis-tools \
     netcat-openbsd \
     unzip \
+    ca-certificates \
+    gnupg \
+    lsb-release \
     && rm -rf /var/lib/apt/lists/*
+
+# Docker CLI 설치 (PoC 재현용)
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli && \
+    rm -rf /var/lib/apt/lists/*
 
 # Go 설치 (Nuclei 빌드용)
 RUN wget -q https://go.dev/dl/go1.21.5.linux-amd64.tar.gz && \

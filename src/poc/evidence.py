@@ -143,43 +143,55 @@ class EvidenceCollector:
             # 1. 시스템콜 로그 수집 (컨테이너 내 strace 실행)
             if collect_syscalls:
                 syscall_path = self.evidence_dir / f"{reproduction_id}_syscalls.log"
-                # 컨테이너 내에서 strace로 프로세스 추적
-                # 주의: 컨테이너에 strace가 설치되어 있어야 함
-                result = self.isolation.execute_command(
-                    "which strace && strace -o /evidence/syscalls.log -f -e trace=all sleep 1 2>&1 || echo 'strace not available' > /evidence/syscalls.log"
-                )
-                # 컨테이너에서 파일 복사
-                self.isolation.copy_from_container(
-                    f"/evidence/syscalls.log",
-                    str(syscall_path)
-                )
-                evidence_paths["syscalls"] = str(syscall_path)
+                try:
+                    # 컨테이너 내에서 strace로 프로세스 추적
+                    # 주의: 컨테이너에 strace가 설치되어 있어야 함
+                    result = self.isolation.execute_command(
+                        "sh -c 'which strace >/dev/null 2>&1 && strace -o /evidence/syscalls.log -f -e trace=all sleep 1 2>&1 || echo \"strace not available\" > /evidence/syscalls.log'"
+                    )
+                    # 컨테이너에서 파일 복사 시도
+                    if self.isolation.copy_from_container(f"/evidence/syscalls.log", str(syscall_path)):
+                        evidence_paths["syscalls"] = str(syscall_path)
+                        logger.info(f"Syscall log collected: {syscall_path}")
+                    else:
+                        logger.warning(f"Syscall log collection skipped (strace not available or file not found)")
+                except Exception as e:
+                    logger.warning(f"Syscall log collection failed: {str(e)} (strace may not be installed)")
 
             # 2. 네트워크 캡처 (컨테이너 내 tcpdump 실행)
             if collect_network:
                 network_path = self.evidence_dir / f"{reproduction_id}_network.pcap"
-                # 컨테이너 내에서 tcpdump 실행
-                # 주의: 컨테이너에 tcpdump가 설치되어 있어야 함
-                result = self.isolation.execute_command(
-                    "which tcpdump && timeout 5 tcpdump -i any -w /evidence/network.pcap 2>&1 || echo 'tcpdump not available' > /evidence/network.pcap"
-                )
-                # 컨테이너에서 파일 복사
-                self.isolation.copy_from_container(
-                    f"/evidence/network.pcap",
-                    str(network_path)
-                )
-                evidence_paths["network"] = str(network_path)
+                try:
+                    # 컨테이너 내에서 tcpdump 실행
+                    # 주의: 컨테이너에 tcpdump가 설치되어 있어야 함
+                    result = self.isolation.execute_command(
+                        "sh -c 'which tcpdump >/dev/null 2>&1 && timeout 5 tcpdump -i any -w /evidence/network.pcap 2>&1 || echo \"tcpdump not available\" > /evidence/network.pcap'"
+                    )
+                    # 컨테이너에서 파일 복사 시도
+                    if self.isolation.copy_from_container(f"/evidence/network.pcap", str(network_path)):
+                        evidence_paths["network"] = str(network_path)
+                        logger.info(f"Network capture collected: {network_path}")
+                    else:
+                        logger.warning(f"Network capture skipped (tcpdump not available or file not found)")
+                except Exception as e:
+                    logger.warning(f"Network capture failed: {str(e)} (tcpdump may not be installed)")
 
             # 3. 파일 시스템 diff 수집
             if collect_fs_diff:
                 fs_diff_path = self.evidence_dir / f"{reproduction_id}_fs_diff.txt"
-                # 주요 디렉토리 변화 추적
-                result = self.isolation.execute_command(
-                    "find /tmp /var/tmp /root -type f -newer /tmp 2>/dev/null | head -100"
-                )
-                if result["stdout"]:
-                    fs_diff_path.write_text(result["stdout"], encoding="utf-8")
-                    evidence_paths["fs_diff"] = str(fs_diff_path)
+                try:
+                    # 주요 디렉토리 변화 추적
+                    result = self.isolation.execute_command(
+                        "sh -c 'find /tmp /var/tmp /root -type f 2>/dev/null | head -100'"
+                    )
+                    if result.get("stdout"):
+                        fs_diff_path.write_text(result["stdout"], encoding="utf-8")
+                        evidence_paths["fs_diff"] = str(fs_diff_path)
+                        logger.info(f"Filesystem diff collected: {fs_diff_path}")
+                    else:
+                        logger.debug(f"Filesystem diff empty (no changes detected)")
+                except Exception as e:
+                    logger.warning(f"Filesystem diff collection failed: {str(e)}")
 
             logger.info(f"Evidence collected: {reproduction_id}")
             return evidence_paths

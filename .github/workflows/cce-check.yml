@@ -1,0 +1,73 @@
+name: CCE Compliance Check on EC2
+
+on:
+  schedule:
+    # 매일 오전 2시 (UTC) 실행
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      target_host:
+        description: '점검 대상 호스트 (기본값: EC2 자체)'
+        required: false
+        default: 'localhost'
+
+jobs:
+  cce-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+    - name: Run CCE Compliance Check
+      timeout-minutes: 30
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          cd ~/V2R
+          git pull origin main || true
+          
+          # Python 환경 확인
+          if ! command -v python3 &> /dev/null; then
+            echo "Python3 설치 중..."
+            sudo yum install python3 python3-pip -y || sudo apt-get install python3 python3-pip -y
+          fi
+          
+          # CCE 점검 스크립트 실행
+          if [ -f "scripts/compliance/cce_check.py" ]; then
+            python3 scripts/compliance/cce_check.py \
+              --target ${{ github.event.inputs.target_host || 'localhost' }} \
+              --output cce_results_$(date +%Y%m%d_%H%M%S).json
+          else
+            echo "⚠️  CCE 점검 스크립트가 아직 구현되지 않았습니다."
+            echo "scripts/compliance/cce_check.py 파일을 생성해주세요."
+          fi
+        EOF
+
+    - name: Download CCE Results
+      if: always()
+      run: |
+        scp -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            ec2-user@${{ secrets.EC2_HOST }}:~/V2R/cce_results_*.json \
+            ./cce_results/ || true
+
+    - name: Upload CCE Results Artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cce-compliance-results
+        path: cce_results/*.json
+        if-no-files-found: ignore
+
+
+

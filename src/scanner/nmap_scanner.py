@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class NmapScanner:
     """Nmap 스캐너 래퍼 클래스"""
 
-    def __init__(self, scan_timeout: int = 300):
+    def __init__(self, scan_timeout: int = 60):  # 기본값 단축 (300 -> 60초)
         """
         Args:
             scan_timeout: 스캔 타임아웃 (초)
@@ -38,7 +38,15 @@ class NmapScanner:
             스캔 결과 딕셔너리
         """
         self.target = target
-        self.scan_id = f"nmap_{target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # 밀리초 포함하여 중복 방지
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
+        # 포트 정보를 포함하여 동일 타임스탬프에서도 중복 방지
+        # ports 문자열을 정규화 (예: "6379" -> "p6379", "1-1000" -> "r1-1000")
+        port_suffix = ports.replace(",", "_").replace("-", "_").replace(" ", "_")
+        if len(port_suffix) > 20:  # 너무 길면 해시 사용
+            import hashlib
+            port_suffix = hashlib.md5(port_suffix.encode()).hexdigest()[:8]
+        self.scan_id = f"nmap_{target}_p{port_suffix}_{timestamp}"
 
         logger.info(f"Starting Nmap scan: target={target}, ports={ports}, type={scan_type}")
 

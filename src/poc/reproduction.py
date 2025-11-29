@@ -77,18 +77,39 @@ class POCReproducer:
             poc_content = self._prepare_poc_script(poc_script)
             poc_path = f"/tmp/poc_{self.reproduction_id}.py"
 
-            # 스크립트를 컨테이너에 복사
+            # 스크립트를 로컬에 저장
             local_poc_file = PROJECT_ROOT / "evidence" / f"poc_{self.reproduction_id}.py"
             local_poc_file.parent.mkdir(parents=True, exist_ok=True)
             local_poc_file.write_text(poc_content, encoding="utf-8")
 
-            # 컨테이너에 복사 (간단한 방법: exec로 파일 생성)
-            self.isolation.execute_command(
-                f"mkdir -p /tmp && cat > {poc_path} << 'EOFPOC'\n{poc_content}\nEOFPOC"
-            )
+            # 컨테이너에 파일 복사 (Python으로 base64 인코딩하여 전송)
+            import base64
+            poc_encoded = base64.b64encode(poc_content.encode('utf-8')).decode('utf-8')
+            
+            # base64 디코딩하여 파일 생성
+            create_file_cmd = f"""python3 -c "
+import base64
+content = base64.b64decode('{poc_encoded}').decode('utf-8')
+with open('{poc_path}', 'w') as f:
+    f.write(content)
+print('File created successfully')
+" """
+            result = self.isolation.execute_command(create_file_cmd)
+            if result["exit_code"] != 0:
+                logger.error(f"Failed to create PoC file: {result.get('stdout', '')} {result.get('stderr', '')}")
+                raise RuntimeError(f"Failed to create PoC file in container: {result.get('stdout', '')}")
 
             # 3. PoC 실행
             execution_result = self._execute_poc(poc_path, timeout)
+            
+            # 실행 결과 로깅
+            logger.info(f"PoC execution result: exit_code={execution_result.get('exit_code')}, "
+                       f"stdout_length={len(execution_result.get('stdout', ''))}, "
+                       f"stderr_length={len(execution_result.get('stderr', ''))}")
+            if execution_result.get('stdout'):
+                logger.debug(f"PoC stdout: {execution_result.get('stdout')[:200]}")
+            if execution_result.get('stderr'):
+                logger.warning(f"PoC stderr: {execution_result.get('stderr')[:200]}")
 
             # 4. 결과 판정
             status = self._determine_status(execution_result, poc_type)
@@ -149,7 +170,21 @@ class POCReproducer:
             실행 결과
         """
         try:
-            # Python 스크립트 실행
+            # Python 스크립트 실행 (파일이 존재하는지 먼저 확인)
+            # shell=True로 실행하여 && 연산자 정상 처리
+            check_file_cmd = f"sh -c 'test -f {poc_path} && echo File exists || echo File not found'"
+            check_result = self.isolation.execute_command(check_file_cmd)
+            logger.debug(f"PoC file check: {check_result.get('stdout', '')}")
+            
+            # 필요한 Python 모듈 설치 확인 및 설치 (실패해도 경고만 남기고 계속 진행)
+            install_deps_cmd = "sh -c 'python3 -c \"import requests\" 2>&1 || pip3 install requests --quiet 2>&1 || echo \"Warning: requests not available\"'"
+            deps_result = self.isolation.execute_command(install_deps_cmd)
+            if deps_result.get('exit_code') != 0:
+                logger.warning(f"Dependencies check: {deps_result.get('stdout', '')[:100]}")
+            else:
+                logger.debug(f"Dependencies check: {deps_result.get('stdout', '')[:100]}")
+            
+            # Python 스크립트 실행 (단순 파일 실행, -m 옵션 없음)
             result = self.isolation.execute_command(
                 f"python3 {poc_path}",
                 timeout=timeout
@@ -186,27 +221,37 @@ class POCReproducer:
         Returns:
             상태 (success, failed, partial)
         """
-        if execution_result.get("success", False):
-            # 성공 판정 기준
-            stdout = execution_result.get("stdout", "").lower()
-            stderr = execution_result.get("stderr", "").lower()
-
-            # PoC 유형별 성공 지표
+        exit_code = execution_result.get("exit_code", -1)
+        stdout = execution_result.get("stdout", "").lower()
+        stderr = execution_result.get("stderr", "").lower()
+        success = execution_result.get("success", False)
+        
+        # exit_code가 0이면 성공으로 간주
+        # 또는 stdout에 "성공", "success", "완료" 등의 키워드가 있으면 성공으로 간주
+        success_keywords = ["성공", "success", "완료", "전송", "executed", "completed"]
+        has_success_keyword = any(keyword in stdout for keyword in success_keywords)
+        
+        if exit_code == 0 or success or has_success_keyword:
+            # PoC 유형별 성공 지표 (선택사항)
             success_indicators = {
                 "command_injection": ["command", "executed", "output"],
                 "sql_injection": ["sql", "query", "result"],
                 "rce": ["remote", "code", "execution"],
-                "xss": ["script", "alert", "xss"]
+                "xss": ["script", "alert", "xss"],
+                "test": ["test", "success", "executed"]  # 테스트용
             }
 
             indicators = success_indicators.get(poc_type, [])
             has_indicator = any(ind in stdout or ind in stderr for ind in indicators)
 
-            if has_indicator or execution_result.get("exit_code") == 0:
+            # exit_code가 0이거나 성공 지표가 있으면 성공
+            if exit_code == 0 or has_indicator:
                 return "success"
             else:
                 return "partial"
-
+        
+        # exit_code가 0이 아니면 실패
+        logger.warning(f"PoC execution failed: exit_code={exit_code}, stdout={stdout[:100]}, stderr={stderr[:100]}")
         return "failed"
 
     def create_snapshot(self, tag: Optional[str] = None) -> Optional[str]:

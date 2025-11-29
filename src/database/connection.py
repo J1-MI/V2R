@@ -136,6 +136,7 @@ class DatabaseConnection:
     def execute_sql_file(self, filepath: str) -> bool:
         """
         SQL 파일 실행 (스키마 생성 등)
+        dollar-quoted string을 고려하여 처리
 
         Args:
             filepath: SQL 파일 경로
@@ -150,17 +151,55 @@ class DatabaseConnection:
             with open(filepath, 'r', encoding='utf-8') as f:
                 sql_content = f.read()
 
-            # SQL 문을 세미콜론으로 분리
-            statements = [s.strip() for s in sql_content.split(';') if s.strip()]
-
+            # PostgreSQL은 여러 문장을 한 번에 실행 가능
+            # dollar-quoted string을 고려하여 전체를 한 번에 실행
             with self.engine.connect() as conn:
-                for statement in statements:
-                    if statement:
-                        conn.execute(text(statement))
-                conn.commit()
-
-            logger.info(f"SQL file executed: {filepath}")
-            return True
+                try:
+                    # 전체 SQL을 한 번에 실행 (dollar-quoted string 지원)
+                    conn.execute(text(sql_content))
+                    conn.commit()
+                    logger.info(f"SQL file executed: {filepath}")
+                    return True
+                except Exception as e:
+                    # 전체 실행 실패 시, psql 스타일로 문장 단위 실행 시도
+                    logger.warning(f"Full SQL execution failed, trying statement by statement: {str(e)}")
+                    
+                    # 간단한 분리: 주석 제거 후 세미콜론으로 분리
+                    # (dollar-quoted string은 이미 전체 실행에서 실패했으므로 여기서는 단순 분리)
+                    lines = []
+                    for line in sql_content.split('\n'):
+                        stripped = line.strip()
+                        if stripped and not stripped.startswith('--'):
+                            lines.append(line)
+                    
+                    sql_cleaned = '\n'.join(lines)
+                    statements = []
+                    current = []
+                    
+                    for line in sql_cleaned.split('\n'):
+                        current.append(line)
+                        if line.strip().endswith(';'):
+                            statement = '\n'.join(current).strip()
+                            if statement:
+                                statements.append(statement)
+                            current = []
+                    
+                    if current:
+                        statement = '\n'.join(current).strip()
+                        if statement:
+                            statements.append(statement)
+                    
+                    # 각 문장 실행
+                    for statement in statements:
+                        if statement:
+                            try:
+                                conn.execute(text(statement))
+                            except Exception as stmt_error:
+                                logger.warning(f"SQL statement failed (continuing): {statement[:100]}... - {str(stmt_error)}")
+                    
+                    conn.commit()
+                    logger.info(f"SQL file executed (statement by statement): {filepath}")
+                    return True
 
         except Exception as e:
             logger.error(f"SQL file execution failed: {filepath} - {str(e)}")

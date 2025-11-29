@@ -32,11 +32,69 @@ class IsolationEnvironment:
         self.snapshot_tag = None
 
         try:
-            self.client = docker.from_env()
+            # Docker 클라이언트 초기화 (여러 방법 시도)
+            self.client = self._initialize_docker_client()
             logger.info("Docker client initialized")
         except Exception as e:
             logger.error(f"Failed to initialize Docker client: {str(e)}")
+            logger.warning("PoC 격리 재현 기능은 사용할 수 없습니다. Docker 소켓에 접근할 수 없습니다.")
             raise
+    
+    def _initialize_docker_client(self):
+        """
+        Docker 클라이언트 초기화 (Windows/Linux 호환)
+        
+        Returns:
+            Docker 클라이언트 객체
+        """
+        import os
+        import platform
+        
+        # 방법 1: 환경 변수에서 DOCKER_HOST 확인
+        docker_host = os.getenv("DOCKER_HOST")
+        
+        # 방법 2: 기본 소켓 경로 확인
+        socket_paths = [
+            "/var/run/docker.sock",  # Linux 표준 경로
+            "/run/docker.sock",      # 일부 Linux 배포판
+        ]
+        
+        # Windows Docker Desktop (WSL2)의 경우
+        if platform.system() == "Linux":
+            # 컨테이너 내부에서 실행 중인 경우
+            for socket_path in socket_paths:
+                if os.path.exists(socket_path):
+                    try:
+                        client = docker.DockerClient(base_url=f"unix://{socket_path}")
+                        # 연결 테스트
+                        client.ping()
+                        logger.info(f"Docker client connected via {socket_path}")
+                        return client
+                    except Exception:
+                        continue
+        
+        # 방법 3: docker.from_env() 사용 (자동 감지)
+        try:
+            client = docker.from_env()
+            # 연결 테스트
+            client.ping()
+            logger.info("Docker client connected via docker.from_env()")
+            return client
+        except Exception as e:
+            logger.warning(f"docker.from_env() failed: {str(e)}")
+        
+        # 방법 4: TCP 연결 시도 (Docker Desktop TCP 포트)
+        if docker_host and docker_host.startswith("tcp://"):
+            try:
+                client = docker.DockerClient(base_url=docker_host)
+                client.ping()
+                logger.info(f"Docker client connected via TCP: {docker_host}")
+                return client
+            except Exception:
+                pass
+        
+        # 모든 방법 실패
+        raise Exception("Cannot connect to Docker daemon. Please check Docker socket access.")
 
     def create_container(
         self,
@@ -76,6 +134,8 @@ class IsolationEnvironment:
                 }
 
             # 컨테이너 생성 옵션
+            # 참고: containers.create()는 remove 파라미터를 지원하지 않음
+            # remove는 containers.run()에서만 사용 가능
             container_config = {
                 "image": self.base_image,
                 "name": name,
@@ -84,8 +144,7 @@ class IsolationEnvironment:
                 "tty": True,
                 "volumes": volumes,
                 "network_disabled": network_disabled,
-                "privileged": privileged,
-                "remove": False  # 수동으로 삭제
+                "privileged": privileged
             }
 
             if environment:
@@ -146,17 +205,11 @@ class IsolationEnvironment:
             if self.container is None:
                 raise RuntimeError("Container not created or started")
 
-            exec_config = {
-                "cmd": command,
-                "timeout": timeout
-            }
-
-            if workdir:
-                exec_config["workdir"] = workdir
-
+            # exec_run()은 timeout 파라미터를 직접 지원하지 않음
+            # 타임아웃이 필요한 경우 signal이나 threading을 사용해야 함
+            # 여기서는 workdir만 전달
             exec_result = self.container.exec_run(
                 command,
-                timeout=timeout,
                 workdir=workdir
             )
 

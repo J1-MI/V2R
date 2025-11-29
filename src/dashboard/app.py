@@ -10,10 +10,13 @@ from typing import List, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-from src.database import get_db
+from src.database import get_db, initialize_database
 from src.database.repository import ScanResultRepository, POCReproductionRepository
+from src.database.models import POCReproduction, POCMetadata
 from src.report import ReportGenerator
 from src.llm import LLMReportGenerator
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy import desc
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +129,24 @@ def show_dashboard():
                 else:
                     st.info("스캔 결과가 아직 없습니다.")
 
+    except ProgrammingError as e:
+        if "does not exist" in str(e) or "relation" in str(e).lower():
+            st.error("⚠️ 데이터베이스 테이블이 존재하지 않습니다.")
+            st.info("데이터베이스를 초기화해야 합니다.")
+            if st.button("🔄 데이터베이스 초기화"):
+                with st.spinner("데이터베이스 초기화 중..."):
+                    try:
+                        if initialize_database():
+                            st.success("✅ 데이터베이스 초기화 완료! 페이지를 새로고침하세요.")
+                            st.rerun()
+                        else:
+                            st.error("❌ 데이터베이스 초기화 실패")
+                    except Exception as init_error:
+                        st.error(f"초기화 오류: {str(init_error)}")
+            st.code("또는 다음 명령어를 실행하세요:\ndocker exec v2r-app python scripts/utils/reset_db.py", language="bash")
+        else:
+            st.error(f"대시보드 로드 실패: {str(e)}")
+            logger.error(f"Dashboard error: {str(e)}")
     except Exception as e:
         st.error(f"대시보드 로드 실패: {str(e)}")
         logger.error(f"Dashboard error: {str(e)}")
@@ -164,20 +185,105 @@ def show_vulnerability_list():
 
             # 취약점 데이터 구성
             vulnerabilities = []
+            
+            # 1. 스캔 결과에서 취약점 추출
             for scan in scans:
                 normalized = scan.normalized_result or {}
                 findings = normalized.get("findings", [])
 
                 for finding in findings:
+                    cve_list = finding.get("cve_list", [])
+                    # CVE에 해당하는 PoC 재현 결과의 신뢰도 점수 조회
+                    reliability_score = "N/A"
+                    if cve_list:
+                        try:
+                            # 가장 최근의 성공한 PoC 재현 결과의 신뢰도 점수 사용
+                            for cve in cve_list[:1]:  # 첫 번째 CVE만 확인
+                                poc_meta = session.query(POCMetadata).filter(
+                                    POCMetadata.cve_id == cve
+                                ).first()
+                                if poc_meta:
+                                    poc_repro = session.query(POCReproduction).filter(
+                                        POCReproduction.poc_id == poc_meta.poc_id,
+                                        POCReproduction.status.in_(["success", "partial"])
+                                    ).order_by(desc(POCReproduction.reproduction_timestamp)).first()
+                                    if poc_repro and poc_repro.reliability_score is not None:
+                                        reliability_score = f"{poc_repro.reliability_score}/100"
+                                        break
+                        except Exception as e:
+                            logger.debug(f"Failed to get reliability score for CVE: {str(e)}")
+                            reliability_score = "N/A"
+                    
                     vulnerabilities.append({
                         "ID": finding.get("finding_id", ""),
                         "제목": finding.get("title", "Unknown"),
                         "심각도": finding.get("severity", "Info"),
-                        "CVE": ", ".join(finding.get("cve_list", [])),
+                        "CVE": ", ".join(cve_list),
                         "스캐너": scan.scanner_name,
                         "대상": scan.target_host,
-                        "발견일": scan.scan_timestamp.strftime("%Y-%m-%d")
+                        "발견일": scan.scan_timestamp.strftime("%Y-%m-%d"),
+                        "신뢰도": reliability_score
                     })
+            
+            # 2. PoC 재현 결과에서 취약점 추출 (스캔 결과에 없는 경우)
+            try:
+                poc_repo = POCReproductionRepository(session)
+                
+                # 최근 PoC 재현 결과 조회 (LEFT JOIN으로 poc_id가 없는 경우도 포함)
+                poc_reproductions = session.query(POCReproduction).outerjoin(
+                    POCMetadata, POCReproduction.poc_id == POCMetadata.poc_id
+                ).order_by(desc(POCReproduction.reproduction_timestamp)).limit(50).all()
+            except Exception as e:
+                logger.error(f"Failed to query PoC reproductions: {str(e)}")
+                poc_reproductions = []
+            
+            # 이미 추가된 CVE 추적
+            existing_cves = set()
+            for vuln in vulnerabilities:
+                cves = vuln.get("CVE", "").split(", ")
+                existing_cves.update([cve.strip() for cve in cves if cve.strip()])
+            
+            # PoC 재현 결과에서 새로운 취약점 추가
+            for poc in poc_reproductions:
+                try:
+                    if poc.poc_id:
+                        poc_metadata = session.query(POCMetadata).filter(
+                            POCMetadata.poc_id == poc.poc_id
+                        ).first()
+                        
+                        if poc_metadata and poc_metadata.cve_id:
+                            cve_id = poc_metadata.cve_id
+                            # 이미 추가된 CVE는 스킵
+                            if cve_id not in existing_cves:
+                                existing_cves.add(cve_id)
+                                
+                                # 상태에 따른 심각도 결정
+                                if poc.status == "success":
+                                    severity = "High"
+                                elif poc.status == "partial":
+                                    severity = "Medium"
+                                else:
+                                    severity = "Low"
+                                
+                                # 신뢰도 점수 조회 (세션 refresh)
+                                session.refresh(poc)
+                                reliability_display = "N/A"
+                                if poc.reliability_score is not None:
+                                    reliability_display = f"{poc.reliability_score}/100"
+                                
+                                vulnerabilities.append({
+                                    "ID": poc.reproduction_id,
+                                    "제목": f"{cve_id} (PoC 재현)",
+                                    "심각도": severity,
+                                    "CVE": cve_id,
+                                    "스캐너": "PoC",
+                                    "대상": poc.target_host or "Unknown",
+                                    "발견일": poc.reproduction_timestamp.strftime("%Y-%m-%d") if poc.reproduction_timestamp else "N/A",
+                                    "신뢰도": reliability_display
+                                })
+                except Exception as e:
+                    logger.debug(f"Failed to process PoC reproduction {poc.reproduction_id}: {str(e)}")
+                    continue
 
             if vulnerabilities:
                 df = pd.DataFrame(vulnerabilities)
@@ -196,6 +302,14 @@ def show_vulnerability_list():
             else:
                 st.info("취약점이 없습니다.")
 
+    except ProgrammingError as e:
+        if "does not exist" in str(e) or "relation" in str(e).lower():
+            st.warning("⚠️ 데이터베이스 테이블이 존재하지 않습니다. 데이터베이스를 초기화하세요.")
+            st.info("대시보드 페이지에서 '데이터베이스 초기화' 버튼을 클릭하거나 다음 명령어를 실행하세요:")
+            st.code("docker exec v2r-app python scripts/utils/reset_db.py", language="bash")
+        else:
+            st.error(f"취약점 리스트 로드 실패: {str(e)}")
+            logger.error(f"Vulnerability list error: {str(e)}")
     except Exception as e:
         st.error(f"취약점 리스트 로드 실패: {str(e)}")
         logger.error(f"Vulnerability list error: {str(e)}")
@@ -210,18 +324,58 @@ def show_poc_reproductions():
         with db.get_session() as session:
             repo = POCReproductionRepository(session)
 
-            # 재현 결과 조회
-            reproductions = repo.get_by_status("success") + repo.get_by_status("partial")
+            # 상태 필터 옵션
+            status_filter = st.selectbox(
+                "상태 필터",
+                ["전체", "성공", "부분 성공", "실패"],
+                key="poc_status_filter"
+            )
+            
+            # 재현 결과 조회 (신뢰도 점수 포함)
+            if status_filter == "전체":
+                # 모든 상태 조회
+                reproductions = session.query(POCReproduction).order_by(
+                    desc(POCReproduction.reproduction_timestamp)
+                ).limit(100).all()
+            elif status_filter == "성공":
+                reproductions = session.query(POCReproduction).filter(
+                    POCReproduction.status == "success"
+                ).order_by(desc(POCReproduction.reproduction_timestamp)).limit(100).all()
+            elif status_filter == "부분 성공":
+                reproductions = session.query(POCReproduction).filter(
+                    POCReproduction.status == "partial"
+                ).order_by(desc(POCReproduction.reproduction_timestamp)).limit(100).all()
+            else:  # 실패
+                reproductions = session.query(POCReproduction).filter(
+                    POCReproduction.status == "failed"
+                ).order_by(desc(POCReproduction.reproduction_timestamp)).limit(100).all()
 
             if reproductions:
                 poc_data = []
                 for poc in reproductions:
+                    # 상태에 따른 색상 표시
+                    status_display = poc.status
+                    if poc.status == "success":
+                        status_display = "✅ 성공"
+                    elif poc.status == "partial":
+                        status_display = "⚠️ 부분 성공"
+                    elif poc.status == "failed":
+                        status_display = "❌ 실패"
+                    else:
+                        status_display = f"❓ {poc.status}"
+                    
+                    # 신뢰도 점수 조회 (세션 refresh)
+                    session.refresh(poc)
+                    reliability_display = "N/A"
+                    if poc.reliability_score is not None:
+                        reliability_display = f"{poc.reliability_score}/100"
+                    
                     poc_data.append({
-                        "재현 ID": poc.reproduction_id[:20] + "...",
-                        "상태": poc.status,
-                        "신뢰도 점수": poc.reliability_score or "N/A",
+                        "재현 ID": poc.reproduction_id,
+                        "상태": status_display,
+                        "신뢰도 점수": reliability_display,
                         "대상": poc.target_host,
-                        "재현 시간": poc.reproduction_timestamp.strftime("%Y-%m-%d %H:%M")
+                        "재현 시간": poc.reproduction_timestamp.strftime("%Y-%m-%d %H:%M") if poc.reproduction_timestamp else "N/A"
                     })
 
                 df = pd.DataFrame(poc_data)
@@ -229,11 +383,60 @@ def show_poc_reproductions():
 
                 # 상세 정보
                 if st.checkbox("상세 정보 표시"):
-                    selected_id = st.selectbox("재현 ID 선택", df["재현 ID"].tolist())
-                    # 상세 정보 표시 로직 추가 가능
+                    selected_ids = [poc.reproduction_id for poc in reproductions]
+                    selected_id = st.selectbox("재현 ID 선택", selected_ids)
+                    
+                    # 선택된 재현의 상세 정보 표시
+                    selected_poc = next((p for p in reproductions if p.reproduction_id == selected_id), None)
+                    if selected_poc:
+                        st.subheader("상세 정보")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**재현 ID**: {selected_poc.reproduction_id}")
+                            st.write(f"**상태**: {selected_poc.status}")
+                            st.write(f"**대상**: {selected_poc.target_host}")
+                            st.write(f"**재현 시간**: {selected_poc.reproduction_timestamp}")
+                        with col2:
+                            st.write(f"**신뢰도 점수**: {selected_poc.reliability_score or 'N/A'}")
+                            st.write(f"**증거 위치**: {selected_poc.evidence_location or 'N/A'}")
+                            st.write(f"**시스템콜 로그**: {selected_poc.syscall_log_path or 'N/A'}")
+                            st.write(f"**네트워크 캡처**: {selected_poc.network_capture_path or 'N/A'}")
+                        
+                        # 실패한 경우 오류 정보 표시
+                        if selected_poc.status == "failed":
+                            st.error("❌ 이 PoC 재현은 실패했습니다.")
+                            
+                            # 에러 메시지가 evidence_location에 저장되어 있는지 확인
+                            if selected_poc.evidence_location and selected_poc.evidence_location.startswith("ERROR:"):
+                                error_msg = selected_poc.evidence_location.replace("ERROR: ", "", 1)
+                                st.code(error_msg, language="text")
+                            
+                            # 일반적인 해결 방법 안내
+                            with st.expander("🔧 문제 해결 방법"):
+                                st.markdown("""
+                                **가능한 원인:**
+                                1. Docker 소켓 접근 문제
+                                2. 컨테이너 생성/실행 실패
+                                3. 네트워크 연결 문제
+                                4. PoC 스크립트 실행 오류
+                                
+                                **확인 사항:**
+                                - Docker Desktop이 실행 중인지 확인
+                                - `docker-compose.yml`에서 Docker 소켓 마운트 확인
+                                - 컨테이너 로그 확인: `docker logs <container_id>`
+                                """)
             else:
                 st.info("PoC 재현 결과가 없습니다.")
+                st.info("💡 팁: 스캔 결과에서 CVE를 발견하면 자동으로 PoC 재현이 시도됩니다.")
 
+    except ProgrammingError as e:
+        if "does not exist" in str(e) or "relation" in str(e).lower():
+            st.warning("⚠️ 데이터베이스 테이블이 존재하지 않습니다. 데이터베이스를 초기화하세요.")
+            st.info("대시보드 페이지에서 '데이터베이스 초기화' 버튼을 클릭하거나 다음 명령어를 실행하세요:")
+            st.code("docker exec v2r-app python scripts/utils/reset_db.py", language="bash")
+        else:
+            st.error(f"PoC 재현 결과 로드 실패: {str(e)}")
+            logger.error(f"POC reproduction error: {str(e)}")
     except Exception as e:
         st.error(f"PoC 재현 결과 로드 실패: {str(e)}")
         logger.error(f"POC reproduction error: {str(e)}")
@@ -298,6 +501,14 @@ def show_report_generation():
                     else:
                         st.error(f"리포트 생성 실패: {result.get('error')}")
 
+    except ProgrammingError as e:
+        if "does not exist" in str(e) or "relation" in str(e).lower():
+            st.warning("⚠️ 데이터베이스 테이블이 존재하지 않습니다. 데이터베이스를 초기화하세요.")
+            st.info("대시보드 페이지에서 '데이터베이스 초기화' 버튼을 클릭하거나 다음 명령어를 실행하세요:")
+            st.code("docker exec v2r-app python scripts/utils/reset_db.py", language="bash")
+        else:
+            st.error(f"리포트 생성 실패: {str(e)}")
+            logger.error(f"Report generation error: {str(e)}")
     except Exception as e:
         st.error(f"리포트 생성 실패: {str(e)}")
         logger.error(f"Report generation error: {str(e)}")

@@ -4,6 +4,7 @@ PoC 재현 파이프라인
 """
 
 import logging
+import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -105,19 +106,120 @@ class POCPipeline:
                 saved_reproduction = repo.save(reproduction_data)
                 logger.info(f"PoC reproduction saved to DB: {reproduction_id}")
 
+                # 5. 신뢰도 점수 계산 및 저장
+                reliability_score = None
+                logger.info(f"Calculating reliability score for reproduction_id: {reproduction_id}, poc_metadata_id: {poc_metadata_id}")
+                
+                # poc_metadata_id가 없어도 source, cve_id, poc_type이 있으면 계산 가능
+                if poc_metadata_id or (cve_id and source):
+                    try:
+                        from src.verification.reliability import ReliabilityScorer
+                        
+                        # PoC 메타데이터 준비
+                        poc_metadata_dict = {}
+                        if poc_metadata_id:
+                            from src.database.repository import POCMetadataRepository
+                            poc_metadata_repo = POCMetadataRepository(session)
+                            poc_metadata = poc_metadata_repo.get_by_id(poc_metadata_id)
+                            
+                            if poc_metadata:
+                                poc_metadata_dict = poc_metadata.to_dict() if hasattr(poc_metadata, 'to_dict') else {
+                                    "source": poc_metadata.source if hasattr(poc_metadata, 'source') else source,
+                                    "cve_id": poc_metadata.cve_id if hasattr(poc_metadata, 'cve_id') else cve_id,
+                                    "poc_type": poc_metadata.poc_type if hasattr(poc_metadata, 'poc_type') else poc_type
+                                }
+                            else:
+                                logger.warning(f"PoC metadata not found: {poc_metadata_id}, using provided values")
+                                poc_metadata_dict = {
+                                    "source": source,
+                                    "cve_id": cve_id,
+                                    "poc_type": poc_type
+                                }
+                        else:
+                            # poc_metadata_id가 없으면 제공된 값 사용
+                            poc_metadata_dict = {
+                                "source": source,
+                                "cve_id": cve_id,
+                                "poc_type": poc_type
+                            }
+                        
+                        scorer = ReliabilityScorer()
+                        reliability_score = scorer.calculate_reliability_score(
+                            poc_metadata=poc_metadata_dict,
+                            reproduction_result=reproduction_result,
+                            evidence_paths=evidence_paths
+                        )
+                        
+                        # 신뢰도 점수 업데이트
+                        saved_reproduction.reliability_score = reliability_score
+                        session.commit()
+                        # 세션 새로고침하여 변경사항 반영
+                        session.refresh(saved_reproduction)
+                        logger.info(f"Reliability score calculated and saved: {reliability_score}/100 (reproduction_id: {reproduction_id})")
+                    except Exception as e:
+                        logger.error(f"Failed to calculate reliability score: {str(e)}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                else:
+                    logger.warning(f"Cannot calculate reliability score: poc_metadata_id={poc_metadata_id}, cve_id={cve_id}, source={source}")
+
                 return {
                     "success": True,
                     "reproduction_id": reproduction_id,
                     "status": reproduction_result.get("status"),
                     "evidence_paths": evidence_paths,
+                    "reliability_score": reliability_score,
                     "db_id": saved_reproduction.id
                 }
 
         except Exception as e:
             logger.error(f"PoC reproduction pipeline failed: {str(e)}")
+            
+            # 실패한 경우에도 DB에 저장 (상태: failed)
+            try:
+                reproduction_id = f"poc_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                import uuid
+                
+                # PoC 메타데이터 저장 시도
+                poc_metadata_id = None
+                if cve_id:
+                    poc_metadata_id = self._save_poc_metadata(
+                        cve_id=cve_id,
+                        poc_type=poc_type,
+                        source=source,
+                        poc_script=poc_script
+                    )
+                
+                # 실패한 재현 결과도 DB에 저장
+                db = get_db()
+                with db.get_session() as session:
+                    repo = POCReproductionRepository(session)
+                    
+                    # 에러 메시지를 evidence_location에 저장 (임시)
+                    error_msg = str(e)[:500]  # 최대 500자
+                    reproduction_data = {
+                        "reproduction_id": reproduction_id,
+                        "poc_id": poc_metadata_id,
+                        "scan_result_id": scan_result_id,
+                        "target_host": target_host or "",
+                        "reproduction_timestamp": datetime.now(),
+                        "status": "failed",
+                        "evidence_location": f"ERROR: {error_msg}",  # 에러 메시지 저장
+                        "syscall_log_path": "",
+                        "network_capture_path": "",
+                        "filesystem_diff_path": "",
+                        "screenshots_path": []
+                    }
+                    
+                    saved_reproduction = repo.save(reproduction_data)
+                    logger.info(f"Failed PoC reproduction saved to DB: {reproduction_id}")
+            except Exception as save_error:
+                logger.error(f"Failed to save failed PoC reproduction: {str(save_error)}")
+            
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "reproduction_id": reproduction_id if 'reproduction_id' in locals() else None
             }
         finally:
             # 리소스 정리

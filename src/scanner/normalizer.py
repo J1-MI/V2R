@@ -118,26 +118,43 @@ class ScanResultNormalizer:
 
         # Nuclei findings 변환
         for finding in raw_result.get("findings", []):
-            info = finding.get("info", {})
-            normalized_finding = {
-                "finding_id": finding.get("template-id", "") + "_" + finding.get("host", ""),
-                "type": info.get("classification", {}).get("cve-id") or info.get("name", "vulnerability"),
-                "title": info.get("name", "Unknown Vulnerability"),
-                "description": info.get("description", ""),
-                "severity": self._normalize_severity(info.get("severity", "unknown")),
-                "evidence": {
-                    "matched_at": finding.get("matched-at", ""),
-                    "request": finding.get("request", ""),
-                    "response": finding.get("response", ""),
-                    "curl_command": finding.get("curl-command", "")
-                },
-                "source": "nuclei",
-                "cve_list": self._extract_cves(info),
-                "reference": info.get("reference", []),
-                "tags": info.get("tags", []),
-                "recommendation": info.get("remediation", "")
-            }
-            normalized["findings"].append(normalized_finding)
+            try:
+                info = finding.get("info", {})
+                if not isinstance(info, dict):
+                    logger.warning(f"Invalid info structure in finding: {finding.get('template-id', 'unknown')}")
+                    continue
+                
+                # severity 처리 (리스트일 수 있음)
+                severity_raw = info.get("severity", "unknown")
+                
+                # classification 안전하게 접근
+                classification = info.get("classification", {})
+                if not isinstance(classification, dict):
+                    classification = {}
+                
+                normalized_finding = {
+                    "finding_id": finding.get("template-id", "") + "_" + finding.get("host", ""),
+                    "type": classification.get("cve-id") or info.get("name", "vulnerability"),
+                    "title": info.get("name", "Unknown Vulnerability"),
+                    "description": info.get("description", ""),
+                    "severity": self._normalize_severity(severity_raw),
+                    "evidence": {
+                        "matched_at": finding.get("matched-at", ""),
+                        "request": finding.get("request", ""),
+                        "response": finding.get("response", ""),
+                        "curl_command": finding.get("curl-command", "")
+                    },
+                    "source": "nuclei",
+                    "cve_list": self._extract_cves(info),
+                    "reference": info.get("reference", []) if isinstance(info.get("reference"), list) else [],
+                    "tags": info.get("tags", []) if isinstance(info.get("tags"), list) else [],
+                    "recommendation": info.get("remediation", "")
+                }
+                normalized["findings"].append(normalized_finding)
+            except Exception as e:
+                logger.error(f"Error normalizing finding: {str(e)}, finding: {finding.get('template-id', 'unknown')}")
+                logger.debug(f"Finding data: {finding}")
+                continue
 
         return normalized
 
@@ -154,8 +171,19 @@ class ScanResultNormalizer:
             "metadata": raw_result
         }
 
-    def _normalize_severity(self, severity: str) -> str:
+    def _normalize_severity(self, severity) -> str:
         """심각도를 표준 형식으로 변환"""
+        # severity가 리스트인 경우 첫 번째 값 사용
+        if isinstance(severity, list):
+            if len(severity) > 0:
+                severity = severity[0]
+            else:
+                return "Info"
+        
+        # severity가 문자열이 아닌 경우 문자열로 변환
+        if not isinstance(severity, str):
+            severity = str(severity)
+        
         severity_lower = severity.lower()
         return self.SEVERITY_MAP.get(severity_lower, "Info")
 
@@ -192,22 +220,42 @@ class ScanResultNormalizer:
         """정보에서 CVE ID 추출"""
         cves = []
 
-        # CVE ID 필드에서 추출
-        cve_id = info.get("classification", {}).get("cve-id")
-        if cve_id:
-            cves.append(cve_id.upper())
+        try:
+            # CVE ID 필드에서 추출
+            classification = info.get("classification", {})
+            if isinstance(classification, dict):
+                cve_id = classification.get("cve-id")
+                if cve_id:
+                    if isinstance(cve_id, str):
+                        cves.append(cve_id.upper())
+                    elif isinstance(cve_id, list):
+                        # 리스트인 경우 모든 CVE 추가
+                        for cve in cve_id:
+                            if isinstance(cve, str):
+                                cves.append(cve.upper())
 
-        # 참조 링크에서 CVE 추출
-        references = info.get("reference", [])
-        if isinstance(references, list):
-            for ref in references:
-                if isinstance(ref, str):
-                    # CVE 정규식으로 추출
-                    cve_matches = re.findall(r'CVE-\d{4}-\d{4,7}', ref.upper())
-                    cves.extend(cve_matches)
+            # 참조 링크에서 CVE 추출
+            references = info.get("reference", [])
+            if isinstance(references, list):
+                for ref in references:
+                    if isinstance(ref, str):
+                        # CVE 정규식으로 추출
+                        cve_matches = re.findall(r'CVE-\d{4}-\d{4,7}', ref.upper())
+                        cves.extend(cve_matches)
+            
+            # tags에서도 CVE 추출 시도
+            tags = info.get("tags", [])
+            if isinstance(tags, list):
+                for tag in tags:
+                    if isinstance(tag, str) and tag.upper().startswith("CVE-"):
+                        cve_matches = re.findall(r'CVE-\d{4}-\d{4,7}', tag.upper())
+                        cves.extend(cve_matches)
 
-        # 중복 제거 및 정렬
-        return sorted(list(set(cves)))
+            # 중복 제거 및 정렬
+            return sorted(list(set(cves)))
+        except Exception as e:
+            logger.error(f"Error extracting CVEs: {str(e)}")
+            return []
 
     def _create_error_result(
         self,

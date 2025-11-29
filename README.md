@@ -69,7 +69,7 @@ graph TD
 - 상세 변경 이력은 `CHANGELOG.md`를 참고하세요.
 - **로컬 PC 실행 가이드**: `QUICK_START_LOCAL.md` (권장)
 - **로컬 Docker 설정**: `docs/LOCAL_DOCKER_SETUP.md` 참조
-- **EC2 배포 가이드**: `docs/DEPLOYMENT_EC2.md` 참조 (레거시)
+- **EC2 사용 가이드**: `docs/EC2_USAGE.md` (CCE 점검 및 클라우드 데모)
 - **프로젝트 진행률**: `docs/PROGRESS_ANALYSIS.md` 참조
 
 ## 목차

@@ -53,6 +53,8 @@ services:
       # 스캐닝 설정
       SCAN_TIMEOUT: ${SCAN_TIMEOUT:-300}
       MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-5}
+      # Nuclei 템플릿 경로 (Docker 내부 경로)
+      NUCLEI_TEMPLATES_PATH: ${NUCLEI_TEMPLATES_PATH:-/usr/local/bin/nuclei-templates}
       # Python 설정
       PYTHONPATH: /app
       PYTHONUNBUFFERED: 1
@@ -60,6 +62,8 @@ services:
       - .:/app
       - ./evidence:/app/evidence
       - scanner_cache:/root/.cache/nuclei
+      # Docker 소켓 마운트 (PoC 재현용)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "0.0.0.0:8501:8501"  # Streamlit 대시보드 (외부 접근 가능)
       - "0.0.0.0:8000:8000"  # API 서버 (외부 접근 가능)
@@ -68,6 +72,8 @@ services:
         condition: service_healthy
     networks:
       - v2r-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Windows/Mac에서 호스트 접근용
     command: tail -f /dev/null  # 개발 모드: 대기 상태
 
   # 스캐너 전용 컨테이너 (선택)
@@ -97,7 +103,7 @@ services:
     image: vulnerables/web-dvwa:latest
     container_name: dvwa
     ports:
-      - "0.0.0.0:80:80"  # DVWA 웹 인터페이스 (외부 접근 가능)
+      - "0.0.0.0:8080:80"  # DVWA 웹 인터페이스 (외부 접근 가능, 호스트 포트 8080 사용)
     networks:
       - v2r-network
     profiles:

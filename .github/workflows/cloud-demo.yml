@@ -1,0 +1,105 @@
+name: Cloud Demo Setup on EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      demo_type:
+        description: '데모 타입'
+        required: true
+        type: choice
+        options:
+          - vulnerability-scan
+          - compliance-check
+          - full-demo
+      target:
+        description: '데모 대상 (IP 또는 호스트명)'
+        required: false
+        default: ''
+
+jobs:
+  demo-setup:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+    - name: Prepare Demo Environment
+      timeout-minutes: 20
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          cd ~/V2R
+          git pull origin main || true
+          
+          # Python 환경 확인
+          if ! command -v python3 &> /dev/null; then
+            echo "Python3 설치 중..."
+            sudo yum install python3 python3-pip -y || sudo apt-get install python3 python3-pip -y
+          fi
+          
+          # 필요한 Python 패키지 설치 (기본적인 것만)
+          if [ -f "requirements.txt" ]; then
+            pip3 install --user -q requests psutil || true
+          fi
+          
+          echo "✅ 데모 환경 준비 완료"
+          echo "데모 타입: ${{ github.event.inputs.demo_type }}"
+          echo "대상: ${{ github.event.inputs.target || 'N/A' }}"
+        EOF
+
+    - name: Run Demo
+      timeout-minutes: 30
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          set -e
+          cd ~/V2R
+          
+          DEMO_TYPE="${{ github.event.inputs.demo_type }}"
+          TARGET="${{ github.event.inputs.target }}"
+          
+          case "$DEMO_TYPE" in
+            vulnerability-scan)
+              echo "🔍 취약점 스캔 데모 실행"
+              if [ -f "scripts/demo/vulnerability_scan_demo.py" ]; then
+                python3 scripts/demo/vulnerability_scan_demo.py ${TARGET:+--target "$TARGET"}
+              else
+                echo "⚠️  취약점 스캔 데모 스크립트가 아직 구현되지 않았습니다."
+              fi
+              ;;
+            compliance-check)
+              echo "📋 CCE 점검 데모 실행"
+              if [ -f "scripts/compliance/cce_check.py" ]; then
+                python3 scripts/compliance/cce_check.py ${TARGET:+--target "$TARGET"} --demo
+              else
+                echo "⚠️  CCE 점검 스크립트가 아직 구현되지 않았습니다."
+              fi
+              ;;
+            full-demo)
+              echo "🎯 전체 데모 실행"
+              if [ -f "scripts/demo/full_demo.py" ]; then
+                python3 scripts/demo/full_demo.py ${TARGET:+--target "$TARGET"}
+              else
+                echo "⚠️  전체 데모 스크립트가 아직 구현되지 않았습니다."
+              fi
+              ;;
+            *)
+              echo "❌ 알 수 없는 데모 타입: $DEMO_TYPE"
+              exit 1
+              ;;
+          esac
+        EOF
+
+
+

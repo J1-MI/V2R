@@ -10,6 +10,7 @@ from datetime import datetime
 from src.scanner import NmapScanner, NucleiScanner, ScanResultNormalizer
 from src.database import get_db
 from src.database.repository import ScanResultRepository
+from src.config import NUCLEI_TEMPLATES_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,31 @@ class ScannerPipeline:
     def __init__(self, nuclei_templates_path: Optional[str] = None):
         """
         Args:
-            nuclei_templates_path: Nuclei 템플릿 경로 (기본값: /usr/local/bin/nuclei-templates)
+            nuclei_templates_path: Nuclei 템플릿 경로 (None이면 config에서 읽음)
         """
         self.nmap_scanner = NmapScanner()
-        # 템플릿 경로가 지정되지 않으면 기본 경로 사용
-        default_templates_path = nuclei_templates_path or "/usr/local/bin/nuclei-templates"
-        self.nuclei_scanner = NucleiScanner(templates_path=default_templates_path)
+        # 템플릿 경로 우선순위: 인자 > 환경 변수 > 기본값
+        if nuclei_templates_path:
+            templates_path = nuclei_templates_path
+        else:
+            templates_path = NUCLEI_TEMPLATES_PATH
+        
+        # 경로 존재 확인 및 로깅
+        from pathlib import Path
+        templates_path_obj = Path(templates_path)
+        if templates_path_obj.exists():
+            logger.info(f"Using Nuclei templates path: {templates_path}")
+        else:
+            logger.warning(f"Nuclei templates path does not exist: {templates_path}")
+            # 기본 경로로 재시도
+            default_path = "/usr/local/bin/nuclei-templates"
+            if Path(default_path).exists():
+                templates_path = default_path
+                logger.info(f"Using default templates path: {templates_path}")
+            else:
+                logger.error(f"Nuclei templates not found at {templates_path} or {default_path}")
+        
+        self.nuclei_scanner = NucleiScanner(templates_path=templates_path)
         self.normalizer = ScanResultNormalizer()
 
     def run_nmap_scan(

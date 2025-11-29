@@ -17,3 +17,5 @@ else
     docker-compose exec app python scripts/test/run_full_test.py
 fi
 
+
+
