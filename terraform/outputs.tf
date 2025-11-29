@@ -35,7 +35,7 @@ output "scanner_public_ip" {
 
 output "s3_evidence_bucket" {
   description = "증거 저장소 S3 버킷 이름"
-  value       = var.create_s3_bucket ? (length(aws_s3_bucket.evidence) > 0 ? aws_s3_bucket.evidence[0].id : null) : null
+  value       = aws_s3_bucket.evidence.id
 }
 
 output "security_group_web_id" {

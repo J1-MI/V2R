@@ -13,7 +13,6 @@ sys.path.insert(0, str(project_root))
 
 from src.pipeline.scanner_pipeline import ScannerPipeline
 from src.pipeline.poc_pipeline import POCPipeline
-from src.pipeline.priority_pipeline import PriorityPipeline
 from src.verification import ReliabilityScorer
 from src.report import ReportGenerator
 from src.database import get_db, initialize_database
@@ -76,7 +75,6 @@ print("Test PoC execution")
 sys.exit(0)
 """
         
-        # target_host는 자동으로 스캔 결과에서 추출됨 (명시적으로 전달하지 않아도 됨)
         poc_result = poc_pipeline.run_poc_reproduction(
             scan_result_id=scan_result_id,
             poc_script=test_poc_script,
@@ -84,7 +82,6 @@ sys.exit(0)
             cve_id="CVE-TEST-2024-0001",
             source="test",
             collect_evidence=False  # 증거 수집은 시간이 오래 걸릴 수 있음
-            # target_host는 자동 추출됨
         )
         
         if poc_result.get("success"):
@@ -118,23 +115,11 @@ sys.exit(0)
         
         logger.info(f"✓ 신뢰도 점수: {reliability_score}/100")
 
-        # 5. 우선순위 계산
-        logger.info("\n[5/7] 우선순위 계산")
-        priority_pipeline = PriorityPipeline()
-        priority_result = priority_pipeline.calculate_priorities_for_scans([scan_result_id])
-        
-        if priority_result.get("success"):
-            logger.info(f"✓ 우선순위 계산 완료: {priority_result.get('processed', 0)}개 처리")
-            for result in priority_result.get("results", []):
-                logger.info(f"  - {result.get('scan_id')}: 우선순위 {result.get('priority')} (점수: {result.get('priority_score')})")
-        else:
-            logger.warning(f"우선순위 계산 실패: {priority_result.get('error')}")
-        
-        # 6. 리포트 생성
-        logger.info("\n[6/7] 리포트 생성")
+        # 5. 리포트 생성
+        logger.info("\n[5/6] 리포트 생성")
         report_generator = ReportGenerator()
         
-        # 스캔 결과 조회 (세션 내에서 to_dict() 호출)
+        # 스캔 결과 조회
         with db.get_session() as session:
             from src.database.repository import ScanResultRepository, POCReproductionRepository
             scan_repo = ScanResultRepository(session)
@@ -142,15 +127,11 @@ sys.exit(0)
             
             scan_results = scan_repo.get_recent(days=7, limit=10)
             poc_reproductions = poc_repo.get_successful_reproductions()
-            
-            # 세션 내에서 to_dict() 호출하여 detached instance 오류 방지
-            scan_results_dict = [s.to_dict() for s in scan_results]
-            poc_reproductions_dict = [p.to_dict() for p in poc_reproductions]
         
         report_result = report_generator.generate_report(
             report_id=f"test_report_{Path(__file__).stem}",
-            scan_results=scan_results_dict,
-            poc_reproductions=poc_reproductions_dict
+            scan_results=[s.to_dict() for s in scan_results],
+            poc_reproductions=[p.to_dict() for p in poc_reproductions]
         )
         
         if report_result.get("success"):
@@ -158,8 +139,8 @@ sys.exit(0)
         else:
             logger.warning(f"리포트 생성 실패: {report_result.get('error')}")
 
-        # 7. 대시보드 확인
-        logger.info("\n[7/7] 대시보드 확인")
+        # 6. 대시보드 확인
+        logger.info("\n[6/6] 대시보드 확인")
         logger.info("✓ 대시보드 모듈 로드 확인")
         logger.info("  실행 방법: streamlit run src/dashboard/app.py")
 

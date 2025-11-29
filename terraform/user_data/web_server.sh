@@ -25,9 +25,7 @@ apt-get install -y \
     php-cli \
     libapache2-mod-php \
     python3 \
-    python3-pip \
-    openjdk-17-jdk \
-    maven
+    python3-pip
 
 # Docker 서비스 시작
 systemctl enable docker
@@ -54,17 +52,23 @@ systemctl start apache2
 mkdir -p /var/www/html/dvwa
 cd /var/www/html/dvwa
 
-# 기본 취약 PHP 페이지 생성
-cat > index.php << 'PHPEOF'
+# DVWA 다운로드 (간단한 취약 웹앱 예시)
+if [ ! -f "index.php" ]; then
+    # 기본 취약 PHP 페이지 생성
+    cat > index.php << 'EOF'
 <?php
+// 의도적 취약 웹페이지 예시
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
 if (isset($_GET['cmd'])) {
     echo "<pre>";
-    system($_GET['cmd']);
+    system($_GET['cmd']);  // Command Injection 취약점
     echo "</pre>";
 }
+
 if (isset($_POST['username']) && isset($_POST['password'])) {
+    // SQL Injection 취약점 예시
     $conn = mysqli_connect('localhost', 'dvwa', 'p@ssw0rd', 'dvwa');
     $query = "SELECT * FROM users WHERE username='" . $_POST['username'] . "' AND password='" . $_POST['password'] . "'";
     $result = mysqli_query($conn, $query);
@@ -94,8 +98,9 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
 </form>
 </body>
 </html>
-PHPEOF
-chown www-data:www-data /var/www/html/dvwa -R
+EOF
+    chown www-data:www-data /var/www/html/dvwa -R
+fi
 
 # Juice Shop 배포 (Docker)
 mkdir -p /opt/juice-shop
@@ -111,98 +116,6 @@ services:
     restart: unless-stopped
 EOF
 docker-compose up -d
-
-# SSH 취약 설정
-echo "Configuring SSH for vulnerability testing..."
-sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -i 's/PermitRootLogin no/PermitRootLogin yes/' /etc/ssh/sshd_config
-echo "root:v2r_test_password" | chpasswd
-systemctl restart sshd
-echo "SSH vulnerable configuration applied"
-
-# Text4shell 앱 배포 (간소화 버전)
-echo "Deploying Text4shell vulnerable application..."
-mkdir -p /opt/text4shell-app
-cd /opt/text4shell-app
-
-# 간단한 Java 서버 (Spring Boot 없이)
-cat > Text4ShellServer.java << 'JAVAEOF'
-import org.apache.commons.text.StringSubstitutor;
-import java.io.*;
-import java.net.*;
-import java.util.*;
-
-public class Text4ShellServer {
-    public static void main(String[] args) throws Exception {
-        ServerSocket server = new ServerSocket(8080);
-        System.out.println("Text4shell server started on port 8080");
-        while (true) {
-            Socket client = server.accept();
-            new Thread(() -> {
-                try {
-                    BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-                    PrintWriter out = new PrintWriter(client.getOutputStream(), true);
-                    String request = in.readLine();
-                    if (request != null && request.contains("GET")) {
-                        String response = "HTTP/1.1 200 OK\r\n\r\n";
-                        response += "<html><body><h1>Text4shell Test</h1>";
-                        if (request.contains("input=")) {
-                            String input = request.substring(request.indexOf("input=") + 6).split(" ")[0];
-                            input = URLDecoder.decode(input, "UTF-8");
-                            StringSubstitutor sub = new StringSubstitutor();
-                            String result = sub.replace(input);
-                            response += "<p>Result: " + result + "</p>";
-                        }
-                        response += "</body></html>";
-                        out.println(response);
-                    }
-                    client.close();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }).start();
-        }
-    }
-}
-JAVAEOF
-
-# Maven 프로젝트 생성
-mkdir -p src/main/java
-mv Text4ShellServer.java src/main/java/
-cat > pom.xml << 'EOF'
-<?xml version="1.0"?>
-<project>
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.v2r</groupId>
-    <artifactId>text4shell</artifactId>
-    <version>1.0</version>
-    <dependencies>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-text</artifactId>
-            <version>1.9</version>
-        </dependency>
-    </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>17</source>
-                    <target>17</target>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-</project>
-EOF
-
-# 빌드 및 실행
-mvn compile exec:java -Dexec.mainClass="Text4ShellServer" > /var/log/text4shell.log 2>&1 &
 
 # Apache VirtualHost 설정
 cat > /etc/apache2/sites-available/dvwa.conf << 'EOF'
@@ -227,4 +140,4 @@ chmod 666 /var/log/v2r-web-server.log
 echo "Web server setup completed - $(date)"
 echo "DVWA: http://$(curl -s ifconfig.me)/dvwa"
 echo "Juice Shop: http://$(curl -s ifconfig.me):3000"
-echo "Text4shell: http://$(curl -s ifconfig.me):8080"
+

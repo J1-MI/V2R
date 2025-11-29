@@ -234,10 +234,4 @@ class POCReproductionRepository:
     def get_successful_reproductions(self) -> List[POCReproduction]:
         """성공한 재현만 조회"""
         return self.get_by_status("success")
-    
-    def get_by_scan_result_id(self, scan_result_id: int) -> List[POCReproduction]:
-        """스캔 결과 ID로 조회"""
-        return self.session.query(POCReproduction).filter(
-            POCReproduction.scan_result_id == scan_result_id
-        ).order_by(desc(POCReproduction.reproduction_timestamp)).all()
 

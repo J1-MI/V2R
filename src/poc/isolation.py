@@ -20,29 +20,23 @@ logger = logging.getLogger(__name__)
 class IsolationEnvironment:
     """Docker 기반 격리 환경 관리 클래스"""
 
-    def __init__(self, base_image: str = "python:3.11-slim", allow_docker_failure: bool = False):
+    def __init__(self, base_image: str = "python:3.11-slim"):
         """
         Args:
             base_image: 기본 Docker 이미지 (기본값: python:3.11-slim)
-            allow_docker_failure: Docker 초기화 실패 시 예외를 발생시키지 않고 계속 진행
         """
         self.base_image = base_image
         self.client = None
         self.container = None
         self.container_id = None
         self.snapshot_tag = None
-        self.allow_docker_failure = allow_docker_failure
 
         try:
             self.client = docker.from_env()
             logger.info("Docker client initialized")
         except Exception as e:
-            if allow_docker_failure:
-                logger.warning(f"Docker client initialization failed (will skip Docker operations): {str(e)}")
-                logger.warning("PoC 격리 재현 기능은 사용할 수 없습니다. Docker 소켓에 접근할 수 없습니다.")
-            else:
-                logger.error(f"Failed to initialize Docker client: {str(e)}")
-                raise
+            logger.error(f"Failed to initialize Docker client: {str(e)}")
+            raise
 
     def create_container(
         self,
@@ -65,12 +59,6 @@ class IsolationEnvironment:
         Returns:
             컨테이너 ID
         """
-        if self.client is None:
-            if self.allow_docker_failure:
-                raise RuntimeError("Docker client is not available. PoC 격리 재현 기능을 사용할 수 없습니다.")
-            else:
-                raise RuntimeError("Docker client is not initialized")
-        
         try:
             if name is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -124,10 +112,6 @@ class IsolationEnvironment:
         Returns:
             시작 성공 여부
         """
-        if self.client is None:
-            logger.warning("Docker client not available")
-            return False
-            
         try:
             if self.container is None:
                 logger.error("Container not created")
@@ -158,14 +142,6 @@ class IsolationEnvironment:
         Returns:
             실행 결과 딕셔너리 (exit_code, stdout, stderr)
         """
-        if self.client is None:
-            logger.warning("Docker client not available")
-            return {
-                "exit_code": -1,
-                "stdout": "",
-                "stderr": "Docker client not available"
-            }
-            
         try:
             if self.container is None:
                 raise RuntimeError("Container not created or started")
@@ -212,10 +188,6 @@ class IsolationEnvironment:
         Returns:
             복사 성공 여부
         """
-        if self.client is None:
-            logger.warning("Docker client not available")
-            return False
-            
         try:
             if self.container is None:
                 logger.error("Container not created")
@@ -256,10 +228,6 @@ class IsolationEnvironment:
         Returns:
             복사 성공 여부
         """
-        if self.client is None:
-            logger.warning("Docker client not available")
-            return False
-            
         try:
             if self.container is None:
                 logger.error("Container not created")
@@ -290,10 +258,6 @@ class IsolationEnvironment:
         Returns:
             생성된 이미지 태그
         """
-        if self.client is None:
-            logger.warning("Docker client not available")
-            return None
-            
         try:
             if self.container is None:
                 logger.error("Container not created")
@@ -320,9 +284,6 @@ class IsolationEnvironment:
         Returns:
             중지 성공 여부
         """
-        if self.client is None:
-            return True  # Docker가 없으면 이미 중지된 것으로 간주
-            
         try:
             if self.container is None:
                 return True  # 이미 중지됨
@@ -342,11 +303,6 @@ class IsolationEnvironment:
         Returns:
             삭제 성공 여부
         """
-        if self.client is None:
-            self.container = None
-            self.container_id = None
-            return True  # Docker가 없으면 이미 삭제된 것으로 간주
-            
         try:
             if self.container is None:
                 return True  # 이미 삭제됨
@@ -374,9 +330,6 @@ class IsolationEnvironment:
         Returns:
             컨테이너 정보 딕셔너리
         """
-        if self.client is None:
-            return {"note": "Docker client not available"}
-            
         try:
             if self.container is None:
                 return {}

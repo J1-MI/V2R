@@ -18,12 +18,8 @@ logger = logging.getLogger(__name__)
 class POCPipeline:
     """PoC 재현 파이프라인 클래스"""
 
-    def __init__(self, allow_docker_failure: bool = True):
-        """
-        Args:
-            allow_docker_failure: Docker 실패 시 예외 없이 계속 진행 (테스트 환경용)
-        """
-        self.reproducer = POCReproducer(allow_docker_failure=allow_docker_failure)
+    def __init__(self):
+        self.reproducer = POCReproducer()
         self.evidence_collector = None
 
     def run_poc_reproduction(
@@ -54,25 +50,6 @@ class POCPipeline:
         logger.info(f"Starting PoC reproduction pipeline: scan_result_id={scan_result_id}")
 
         try:
-            # 0. target_host가 None이면 스캔 결과에서 자동으로 추출
-            if target_host is None:
-                db = get_db()
-                with db.get_session() as session:
-                    from src.database.models import ScanResult
-                    scan_result = session.query(ScanResult).filter(
-                        ScanResult.id == scan_result_id
-                    ).first()
-                    if scan_result:
-                        target_host = scan_result.target_host
-                        logger.info(f"Auto-extracted target_host from scan result: {target_host}")
-                    else:
-                        logger.warning(f"Scan result not found (ID: {scan_result_id}), using empty string for target_host")
-                        target_host = ""
-            
-            # target_host가 여전히 None이면 빈 문자열로 변환
-            if target_host is None:
-                target_host = ""
-            
             # 1. PoC 재현 실행
             reproduction_result = self.reproducer.reproduce(
                 poc_script=poc_script,
@@ -113,7 +90,7 @@ class POCPipeline:
                     "reproduction_id": reproduction_id,
                     "poc_id": poc_metadata_id,
                     "scan_result_id": scan_result_id,
-                    "target_host": target_host or reproduction_result.get("target_host") or "",
+                    "target_host": target_host or reproduction_result.get("target_host", ""),
                     "reproduction_timestamp": datetime.fromisoformat(
                         reproduction_result.get("timestamp", datetime.now().isoformat())
                     ),

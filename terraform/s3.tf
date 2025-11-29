@@ -1,7 +1,5 @@
-# 증거 저장소 S3 버킷 (선택적 - IAM 역할에 S3 권한이 있는 경우만)
-# IAM 역할에 S3 권한이 없으면 이 리소스를 주석 처리하세요
+# 증거 저장소 S3 버킷
 resource "aws_s3_bucket" "evidence" {
-  count = var.create_s3_bucket ? 1 : 0
   bucket = "${var.project_name}-${var.environment}-evidence-${data.aws_caller_identity.current.account_id}"
 
   tags = merge(
@@ -15,8 +13,7 @@ resource "aws_s3_bucket" "evidence" {
 
 # 버전 관리 활성화
 resource "aws_s3_bucket_versioning" "evidence" {
-  count  = var.create_s3_bucket ? 1 : 0
-  bucket = aws_s3_bucket.evidence[0].id
+  bucket = aws_s3_bucket.evidence.id
 
   versioning_configuration {
     status = "Enabled"
@@ -25,8 +22,7 @@ resource "aws_s3_bucket_versioning" "evidence" {
 
 # 암호화 활성화
 resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
-  count  = var.create_s3_bucket ? 1 : 0
-  bucket = aws_s3_bucket.evidence[0].id
+  bucket = aws_s3_bucket.evidence.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -37,8 +33,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
 
 # 퍼블릭 액세스 차단
 resource "aws_s3_bucket_public_access_block" "evidence" {
-  count  = var.create_s3_bucket ? 1 : 0
-  bucket = aws_s3_bucket.evidence[0].id
+  bucket = aws_s3_bucket.evidence.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -48,8 +43,7 @@ resource "aws_s3_bucket_public_access_block" "evidence" {
 
 # 수명 주기 정책 (30일 후 자동 삭제 옵션)
 resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
-  count  = var.create_s3_bucket ? 1 : 0
-  bucket = aws_s3_bucket.evidence[0].id
+  bucket = aws_s3_bucket.evidence.id
 
   rule {
     id     = "delete-old-evidence"

@@ -19,14 +19,12 @@ logger = logging.getLogger(__name__)
 class POCReproducer:
     """PoC 재현 클래스"""
 
-    def __init__(self, base_image: str = "python:3.11-slim", allow_docker_failure: bool = True):
+    def __init__(self, base_image: str = "python:3.11-slim"):
         """
         Args:
             base_image: 격리 환경 기본 이미지
-            allow_docker_failure: Docker 실패 시 예외 없이 계속 진행 (테스트 환경용)
         """
         self.base_image = base_image
-        self.allow_docker_failure = allow_docker_failure
         self.isolation = None
         self.reproduction_id = None
 
@@ -57,30 +55,7 @@ class POCReproducer:
 
         try:
             # 1. 격리 환경 생성
-            self.isolation = IsolationEnvironment(
-                base_image=self.base_image,
-                allow_docker_failure=self.allow_docker_failure
-            )
-            
-            # Docker가 사용 불가능한 경우 스킵
-            if self.isolation.client is None:
-                logger.warning("Docker is not available, skipping PoC isolation. Using mock result.")
-                return {
-                    "reproduction_id": self.reproduction_id,
-                    "poc_type": poc_type,
-                    "target_host": target_host,
-                    "status": "skipped",
-                    "execution_result": {
-                        "exit_code": 0,
-                        "stdout": "Docker not available - mock execution",
-                        "stderr": "",
-                        "success": True
-                    },
-                    "container_info": {},
-                    "timestamp": datetime.now().isoformat(),
-                    "note": "Docker isolation skipped - running in test mode"
-                }
-            
+            self.isolation = IsolationEnvironment(base_image=self.base_image)
             container_name = f"v2r-poc-{self.reproduction_id}"
 
             # 환경 변수 설정
@@ -90,14 +65,13 @@ class POCReproducer:
                 "REPRODUCTION_ID": self.reproduction_id
             }
 
-            # 컨테이너 생성 및 시작 (Docker가 사용 가능한 경우만)
-            if self.isolation.client is not None:
-                self.isolation.create_container(
-                    name=container_name,
-                    environment=environment,
-                    network_disabled=not network_enabled
-                )
-                self.isolation.start_container()
+            # 컨테이너 생성 및 시작
+            self.isolation.create_container(
+                name=container_name,
+                environment=environment,
+                network_disabled=not network_enabled
+            )
+            self.isolation.start_container()
 
             # 2. PoC 스크립트 준비
             poc_content = self._prepare_poc_script(poc_script)
@@ -109,20 +83,12 @@ class POCReproducer:
             local_poc_file.write_text(poc_content, encoding="utf-8")
 
             # 컨테이너에 복사 (간단한 방법: exec로 파일 생성)
-            if self.isolation.client is not None:
-                self.isolation.execute_command(
-                    f"mkdir -p /tmp && cat > {poc_path} << 'EOFPOC'\n{poc_content}\nEOFPOC"
-                )
-                # 3. PoC 실행
-                execution_result = self._execute_poc(poc_path, timeout)
-            else:
-                # Docker가 없으면 모의 실행 결과 반환
-                execution_result = {
-                    "exit_code": 0,
-                    "stdout": "Mock PoC execution (Docker not available)",
-                    "stderr": "",
-                    "success": True
-                }
+            self.isolation.execute_command(
+                f"mkdir -p /tmp && cat > {poc_path} << 'EOFPOC'\n{poc_content}\nEOFPOC"
+            )
+
+            # 3. PoC 실행
+            execution_result = self._execute_poc(poc_path, timeout)
 
             # 4. 결과 판정
             status = self._determine_status(execution_result, poc_type)
@@ -182,14 +148,6 @@ class POCReproducer:
         Returns:
             실행 결과
         """
-        if self.isolation.client is None:
-            return {
-                "exit_code": 0,
-                "stdout": "Mock execution (Docker not available)",
-                "stderr": "",
-                "success": True
-            }
-            
         try:
             # Python 스크립트 실행
             result = self.isolation.execute_command(

@@ -84,7 +84,7 @@ resource "aws_route_table_association" "public" {
 # 보안 그룹 - 웹 서버 (의도적 취약 설정)
 resource "aws_security_group" "web_server" {
   name        = "${var.project_name}-${var.environment}-web-sg"
-  description = "Web Server Security Group For Testing With Vulnerable Config"
+  description = "웹 서버 보안 그룹 (테스트용 - 취약 설정 포함)"
   vpc_id      = aws_vpc.main.id
 
   # HTTP
@@ -110,8 +110,8 @@ resource "aws_security_group" "web_server" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # 모든 IP에서 접근 허용 (테스트용)
-    description = "SSH External Access For Testing"
+    cidr_blocks = [var.allowed_ssh_cidr]
+    description = "SSH (의도적 외부 노출)"
   }
 
   # MySQL (의도적 외부 노출 - 테스트용)
@@ -120,16 +120,7 @@ resource "aws_security_group" "web_server" {
     to_port     = 3306
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "MySQL External Access For Testing"
-  }
-
-  # Text4shell 앱 (의도적 외부 노출 - 테스트용)
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Text4shell App External Access For Testing"
+    description = "MySQL (의도적 외부 노출 - 테스트용)"
   }
 
   # 모든 아웃바운드 허용
@@ -153,7 +144,7 @@ resource "aws_security_group" "web_server" {
 # 보안 그룹 - 스캐너/컨트롤러
 resource "aws_security_group" "scanner" {
   name        = "${var.project_name}-${var.environment}-scanner-sg"
-  description = "Scanner Controller Security Group"
+  description = "스캐너/컨트롤러 보안 그룹"
   vpc_id      = aws_vpc.main.id
 
   # SSH
