@@ -40,6 +40,15 @@ db-shell: ## PostgreSQL에 접속
 test: ## 스캐너 테스트 실행
 	docker-compose exec app python src/scanner/test_scanner.py
 
+test-full: ## 전체 시스템 통합 테스트 실행
+	docker-compose exec app python scripts/test/run_full_test.py
+
+test-integration: ## 통합 테스트 실행
+	docker-compose exec app python scripts/test/test_integration.py
+
+test-pipeline: ## 파이프라인 테스트 실행
+	docker-compose exec app python scripts/test/test_pipeline.py
+
 init: ## 환경 초기화
 	bash scripts/docker/init.sh
 
