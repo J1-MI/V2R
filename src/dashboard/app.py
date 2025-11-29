@@ -88,23 +88,43 @@ def show_dashboard():
                 )
                 st.bar_chart(severity_df.set_index("심각도"))
 
-            # 최근 스캔 결과
+            # 최근 스캔 결과 (전체 / 최신 1건 탭 분리)
             st.subheader("최근 스캔 결과")
-            recent_scans = repo.get_recent(days=7, limit=10)
-            if recent_scans:
-                scan_data = []
-                for scan in recent_scans:
-                    scan_data.append({
-                        "스캔 ID": scan.scan_id[:20] + "...",
-                        "대상": scan.target_host,
-                        "스캐너": scan.scanner_name,
-                        "심각도": scan.severity,
-                        "상태": scan.status,
-                        "스캔 시간": scan.scan_timestamp.strftime("%Y-%m-%d %H:%M")
-                    })
-                st.dataframe(pd.DataFrame(scan_data), use_container_width=True)
-            else:
-                st.info("최근 스캔 결과가 없습니다.")
+            recent_scans = repo.get_recent(days=7, limit=50)
+
+            tab_all, tab_latest = st.tabs(["📄 전체 최근 스캔", "🕒 가장 최근 1건"])
+
+            with tab_all:
+                if recent_scans:
+                    scan_data = []
+                    for scan in recent_scans:
+                        scan_data.append({
+                            "스캔 ID": (scan.scan_id[:20] + "...") if len(scan.scan_id) > 20 else scan.scan_id,
+                            "대상": scan.target_host,
+                            "스캐너": scan.scanner_name,
+                            "심각도": scan.severity,
+                            "상태": scan.status,
+                            "스캔 시간": scan.scan_timestamp.strftime("%Y-%m-%d %H:%M")
+                        })
+                    st.dataframe(pd.DataFrame(scan_data), use_container_width=True)
+                else:
+                    st.info("최근 스캔 결과가 없습니다.")
+
+            with tab_latest:
+                if recent_scans:
+                    latest = recent_scans[0]  # get_recent가 최신순 정렬
+                    latest_data = [{
+                        "스캔 ID": latest.scan_id,
+                        "대상": latest.target_host,
+                        "스캐너": latest.scanner_name,
+                        "심각도": latest.severity,
+                        "상태": latest.status,
+                        "스캔 시간": latest.scan_timestamp.strftime("%Y-%m-%d %H:%M")
+                    }]
+                    st.write("가장 최근 스캔 1건")
+                    st.table(pd.DataFrame(latest_data))
+                else:
+                    st.info("스캔 결과가 아직 없습니다.")
 
     except Exception as e:
         st.error(f"대시보드 로드 실패: {str(e)}")
