@@ -137,12 +137,22 @@ class NucleiScanner:
                         except json.JSONDecodeError:
                             continue
 
+            # exit code에 따른 상태 결정
+            # exit code 0: 성공, 1: 취약점 발견 (성공), 2+: 실패
+            if result.returncode == 0:
+                status = "completed"
+            elif result.returncode == 1:
+                # exit code 1은 취약점이 발견되었을 때도 발생할 수 있음
+                status = "completed" if findings else "failed"
+            else:
+                status = "failed"
+            
             scan_result = {
                 "scan_id": self.scan_id,
                 "scanner_name": "nuclei",
                 "scan_timestamp": datetime.now().isoformat(),
                 "target_host": target,
-                "status": "completed" if result.returncode == 0 else "failed",
+                "status": status,
                 "findings": findings,
                 "summary": {
                     "total_findings": len(findings),
@@ -150,18 +160,19 @@ class NucleiScanner:
                     "by_template": self._count_by_template(findings)
                 },
                 "raw_output": result.stdout,
-                "error_output": result.stderr if result.returncode != 0 else None
+                "error_output": result.stderr if result.returncode != 0 else None,
+                "exit_code": result.returncode
             }
 
-            logger.info(f"Nuclei scan completed: {target}, findings={len(findings)}")
-            
             # stderr가 있으면 로깅 (디버깅용)
             if result.stderr:
-                logger.debug(f"Nuclei stderr: {result.stderr[:500]}")  # 처음 500자만
+                logger.warning(f"Nuclei stderr (exit code {result.returncode}): {result.stderr[:500]}")  # 처음 500자만
             
-            # exit code가 0이 아니면 경고
-            if result.returncode != 0:
-                logger.warning(f"Nuclei exited with code {result.returncode}, but status marked as completed")
+            if status == "completed":
+                logger.info(f"Nuclei scan completed: {target}, findings={len(findings)}, exit_code={result.returncode}")
+            else:
+                error_msg = result.stderr[:200] if result.stderr else f"Exit code {result.returncode}"
+                logger.error(f"Nuclei scan failed: {target}, exit_code={result.returncode}, error={error_msg}")
             
             return scan_result
 
