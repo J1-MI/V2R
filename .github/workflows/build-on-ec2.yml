@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Build on EC2
 
 on:
   push:
@@ -7,21 +7,21 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.9.0
       with:
         ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-        
-    - name: Deploy to EC2 (No-Build) - Deprecated Workflow
+
+    - name: Build app on EC2
+      timeout-minutes: 60
       run: |
-        echo "This workflow is deprecated. Use 'Build on EC2' and 'Deploy on EC2' instead."
         ssh -o StrictHostKeyChecking=no \
             -o ServerAliveInterval=60 \
             -o ServerAliveCountMax=10 \
@@ -29,7 +29,10 @@ jobs:
           set -e
           cd ~/V2R
           git pull origin main
-          docker-compose up -d app
-          docker-compose exec -T app python -c "from src.scanner.nuclei_scanner import NucleiScanner; s = NucleiScanner(); print('Nuclei installed:', s._check_nuclei_installed())"
+          # Optional clean-up to ensure space
+          docker system prune -f || true
+          # Build only (no restart here)
+          docker-compose build app
         EOF
+
 

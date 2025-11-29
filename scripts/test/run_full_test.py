@@ -155,20 +155,29 @@ def test_reliability_scoring():
     logger.info("\n" + "=" * 60)
     logger.info("[6/7] 신뢰도 점수 계산 테스트")
     logger.info("=" * 60)
-    
+
     try:
         from src.verification.reliability import ReliabilityScorer
-        
+
         scorer = ReliabilityScorer()
-        
-        # 테스트용 데이터
-        test_data = {
+
+        # 테스트용 메타데이터 / 결과 / 증거 (더미 데이터)
+        poc_metadata = {
             "source": "test",
-            "status": "success",
-            "evidence_count": 1
+            "cve_id": "CVE-TEST-2024-0001",
+            "poc_type": "test",
         }
-        
-        score = scorer.calculate_score(test_data)
+        reproduction_result = {
+            "status": "success",
+            "execution_result": {"success": True},
+        }
+        evidence_paths = {}  # 테스트에서는 실제 증거 파일 없이 0점으로 계산
+
+        score = scorer.calculate_reliability_score(
+            poc_metadata=poc_metadata,
+            reproduction_result=reproduction_result,
+            evidence_paths=evidence_paths,
+        )
         logger.info(f"✓ 신뢰도 점수 계산 성공: {score}/100")
         return True
     except Exception as e:
@@ -181,21 +190,29 @@ def test_report_generation():
     logger.info("\n" + "=" * 60)
     logger.info("[7/7] 리포트 생성 테스트")
     logger.info("=" * 60)
-    
+
     try:
         from src.report.generator import ReportGenerator
-        
+        from pathlib import Path
+
         generator = ReportGenerator()
-        
-        # 테스트용 리포트 생성
-        test_data = {
-            "scan_id": "test_scan_001",
-            "target": "127.0.0.1",
-            "findings": []
-        }
-        
-        report_path = generator.generate_report(test_data, output_path="test_report.docx")
-        
+
+        # 더미 스캔 결과 / PoC 재현 결과
+        scan_results = [{
+            "id": 1,
+            "normalized_result": {
+                "findings": []
+            }
+        }]
+        poc_reproductions = []
+
+        result = generator.generate_report(
+            report_id="test_full_run",
+            scan_results=scan_results,
+            poc_reproductions=poc_reproductions,
+        )
+
+        report_path = result.get("file_path")
         if report_path and Path(report_path).exists():
             logger.info(f"✓ 리포트 생성 성공: {report_path}")
             return True

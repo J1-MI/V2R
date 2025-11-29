@@ -1,0 +1,84 @@
+[1mdiff --git a/scripts/test/run_full_test.py b/scripts/test/run_full_test.py[m
+[1mindex bca5f79..90ac3fc 100644[m
+[1m--- a/scripts/test/run_full_test.py[m
+[1m+++ b/scripts/test/run_full_test.py[m
+[36m@@ -155,20 +155,29 @@[m [mdef test_reliability_scoring():[m
+     logger.info("\n" + "=" * 60)[m
+     logger.info("[6/7] 신뢰도 점수 계산 테스트")[m
+     logger.info("=" * 60)[m
+[31m-    [m
+[32m+[m
+     try:[m
+         from src.verification.reliability import ReliabilityScorer[m
+[31m-        [m
+[32m+[m
+         scorer = ReliabilityScorer()[m
+[31m-        [m
+[31m-        # 테스트용 데이터[m
+[31m-        test_data = {[m
+[32m+[m
+[32m+[m[32m        # 테스트용 메타데이터 / 결과 / 증거 (더미 데이터)[m
+[32m+[m[32m        poc_metadata = {[m
+             "source": "test",[m
+[32m+[m[32m            "cve_id": "CVE-TEST-2024-0001",[m
+[32m+[m[32m            "poc_type": "test",[m
+[32m+[m[32m        }[m
+[32m+[m[32m        reproduction_result = {[m
+             "status": "success",[m
+[31m-            "evidence_count": 1[m
+[32m+[m[32m            "execution_result": {"success": True},[m
+         }[m
+[31m-        [m
+[31m-        score = scorer.calculate_score(test_data)[m
+[32m+[m[32m        evidence_paths = {}  # 테스트에서는 실제 증거 파일 없이 0점으로 계산[m
+[32m+[m
+[32m+[m[32m        score = scorer.calculate_reliability_score([m
+[32m+[m[32m            poc_metadata=poc_metadata,[m
+[32m+[m[32m            reproduction_result=reproduction_result,[m
+[32m+[m[32m            evidence_paths=evidence_paths,[m
+[32m+[m[32m        )[m
+         logger.info(f"✓ 신뢰도 점수 계산 성공: {score}/100")[m
+         return True[m
+     except Exception as e:[m
+[36m@@ -181,21 +190,29 @@[m [mdef test_report_generation():[m
+     logger.info("\n" + "=" * 60)[m
+     logger.info("[7/7] 리포트 생성 테스트")[m
+     logger.info("=" * 60)[m
+[31m-    [m
+[32m+[m
+     try:[m
+         from src.report.generator import ReportGenerator[m
+[31m-        [m
+[32m+[m[32m        from pathlib import Path[m
+[32m+[m
+         generator = ReportGenerator()[m
+[31m-        [m
+[31m-        # 테스트용 리포트 생성[m
+[31m-        test_data = {[m
+[31m-            "scan_id": "test_scan_001",[m
+[31m-            "target": "127.0.0.1",[m
+[31m-            "findings": [][m
+[31m-        }[m
+[31m-        [m
+[31m-        report_path = generator.generate_report(test_data, output_path="test_report.docx")[m
+[31m-        [m
+[32m+[m
+[32m+[m[32m        # 더미 스캔 결과 / PoC 재현 결과[m
+[32m+[m[32m        scan_results = [{[m
+[32m+[m[32m            "id": 1,[m
+[32m+[m[32m            "normalized_result": {[m
+[32m+[m[32m                "findings": [][m
+[32m+[m[32m            }[m
+[32m+[m[32m        }][m
+[32m+[m[32m        poc_reproductions = [][m
+[32m+[m
+[32m+[m[32m        result = generator.generate_report([m
+[32m+[m[32m            report_id="test_full_run",[m
+[32m+[m[32m            scan_results=scan_results,[m
+[32m+[m[32m            poc_reproductions=poc_reproductions,[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        report_path = result.get("file_path")[m
+         if report_path and Path(report_path).exists():[m
+             logger.info(f"✓ 리포트 생성 성공: {report_path}")[m
+             return True[m
