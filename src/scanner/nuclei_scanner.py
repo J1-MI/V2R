@@ -78,7 +78,8 @@ class NucleiScanner:
 
         try:
             # Nuclei 명령어 구성
-            cmd = [self.nuclei_path, "-u", target, "-json", "-rate-limit", str(rate_limit)]
+            # Nuclei v3.x에서는 -jsonl 또는 -j 사용 (v2.x의 -json 대신)
+            cmd = [self.nuclei_path, "-u", target, "-jsonl", "-rate-limit", str(rate_limit)]
 
             # 특정 템플릿 파일 지정 (우선순위 높음)
             if template_files:

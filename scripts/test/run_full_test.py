@@ -243,18 +243,31 @@ def test_vulnerability_scan(target: Optional[str]) -> bool:
         # URL 구성
         if target.startswith("http://") or target.startswith("https://"):
             target_url = target
-            target_ip = target.split("://")[1].split(":")[0].split("/")[0]
+            # IP와 포트 추출
+            url_part = target.split("://")[1].split("/")[0]  # 13.125.220.26:8081
+            if ":" in url_part:
+                target_ip, port = url_part.split(":")
+            else:
+                target_ip = url_part
+                port = None
         else:
             target_ip = target.split(":")[0] if ":" in target else target
+            port = target.split(":")[1] if ":" in target else None
             target_url = f"http://{target}" if ":" in target else f"http://{target}:8080"
 
         logger.info(f"Target: {target_ip} ({target_url})")
 
-        # Nmap 스캔
+        # Nmap 스캔 (포트 자동 감지 또는 기본 포트)
         logger.info("  [1/2] Nmap 스캔 실행 중...")
+        # URL에서 포트 추출
+        if port:
+            ports = port
+        else:
+            ports = "80,443,8080,8081"
+        
         nmap_result = scanner.run_nmap_scan(
             target=target_ip,
-            ports="80,443,8080",
+            ports=ports,
             scan_type="-sV",
             save_to_db=True,
         )
