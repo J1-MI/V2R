@@ -5,7 +5,7 @@ PostgreSQL 연결 및 기본 작업을 처리합니다.
 
 import logging
 from typing import Optional, Dict, Any
-from sqlalchemy import create_engine, Engine, text
+from sqlalchemy import create_engine, Engine, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 from contextlib import contextmanager
@@ -202,10 +202,21 @@ def initialize_database(schema_file: Optional[str] = None) -> bool:
         schema_file = Path(__file__).parent / "schema.sql"
 
     db = get_db()
-    
+
     if not db.test_connection():
         logger.error("Database connection failed, cannot initialize")
         return False
+
+    # 이미 스키마가 생성되어 있으면 schema.sql 재실행을 생략
+    try:
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
+        if "scan_results" in tables and "poc_reproductions" in tables:
+            logger.info("Database schema already initialized, skipping schema.sql execution")
+            return True
+    except Exception as e:
+        # 스키마 상태를 확인하지 못한 경우에만 기존 방식대로 진행
+        logger.warning(f"Failed to inspect existing schema (will try to run schema.sql): {e}")
 
     return db.execute_sql_file(str(schema_file))
 
