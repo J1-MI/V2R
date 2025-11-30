@@ -48,7 +48,7 @@ def create_task(agent_id: str, task_type: str, parameters: Optional[Dict[str, An
     
     Args:
         agent_id: Agent ID
-        task_type: 작업 타입 (DOCKER_STATUS, FULL_SCAN, CCE_CHECK)
+        task_type: 작업 타입 (DOCKER_STATUS, FULL_SCAN, CCE_CHECK, DB_INIT)
         parameters: 작업 파라미터
     
     Returns:

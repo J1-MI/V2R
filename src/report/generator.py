@@ -22,7 +22,17 @@ class ReportGenerator:
         Args:
             llm_generator: LLM 리포트 생성기 (None이면 자동 생성)
         """
-        self.llm_generator = llm_generator or LLMReportGenerator()
+        # LLM 생성기 초기화 (명시적으로 생성하여 로그 확인)
+        if llm_generator is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("LLMReportGenerator 초기화 중...")
+            llm_generator = LLMReportGenerator()
+            if llm_generator.client:
+                logger.info("✅ LLM 연결 성공")
+            else:
+                logger.warning("⚠️ LLM 연결 실패 - Fallback summary 사용")
+        self.llm_generator = llm_generator
         self.reports_dir = PROJECT_ROOT / "reports"
         self.reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -58,10 +68,17 @@ class ReportGenerator:
 
             # 2. Executive Summary
             if executive_summary is None:
-                summary_data = self.llm_generator.generate_executive_summary(
-                    scan_results, poc_reproductions
-                )
-                executive_summary = summary_data.get("executive_summary", "")
+                try:
+                    summary_data = self.llm_generator.generate_executive_summary(
+                        scan_results, poc_reproductions
+                    )
+                    executive_summary = summary_data.get("executive_summary", "")
+                    if not executive_summary:
+                        logger.warning("LLM이 Executive Summary를 생성하지 못했습니다. Fallback summary를 사용합니다.")
+                        executive_summary = "LLM을 통한 Executive Summary 생성에 실패했습니다. 기본 요약을 사용합니다."
+                except Exception as e:
+                    logger.error(f"Executive Summary 생성 중 오류: {str(e)}")
+                    executive_summary = f"Executive Summary 생성 중 오류가 발생했습니다: {str(e)}"
 
             self._add_executive_summary(doc, executive_summary)
 

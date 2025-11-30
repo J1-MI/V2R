@@ -109,12 +109,13 @@ class POCPipeline:
                 # 4-1. PoC 재현 성공 시 관련 scan_result의 severity 업데이트
                 if reproduction_result.get("status") == "success" and cve_id:
                     try:
-                        from src.database.repository import ScanResultRepository
-                        scan_repo = ScanResultRepository(session)
+                        from src.database.models import ScanResult
                         
-                        # scan_result_id로 scan_result 조회
+                        # scan_result_id는 정수 ID이므로 직접 조회
                         if scan_result_id:
-                            scan_result = scan_repo.get_by_id(scan_result_id)
+                            scan_result = session.query(ScanResult).filter(
+                                ScanResult.id == scan_result_id
+                            ).first()
                             if scan_result:
                                 # Log4j (CVE-2021-44228) PoC 재현 성공 시 severity = Critical로 업데이트
                                 if cve_id == "CVE-2021-44228":

@@ -55,13 +55,16 @@ class ScanResultRepository:
             ).first()
 
             if existing:
-                # 업데이트
-                for key, value in scan_data.items():
-                    if hasattr(existing, key) and key not in ["id", "scan_id", "created_at"]:
-                        setattr(existing, key, value)
-                existing.updated_at = datetime.now()
-                result = existing
-                logger.info(f"Updated scan result: {scan_data['scan_id']}")
+                # 기존 레코드가 있으면 업데이트하지 않고 새 레코드 생성
+                # (같은 scan_id로 여러 스캔이 있을 수 있으므로)
+                # 대신 scan_id에 타임스탬프를 추가하여 고유하게 만듦
+                from src.utils.id_generator import generate_scan_id
+                import time
+                new_scan_id = f"{scan_data['scan_id']}_{int(time.time() * 1000)}"
+                scan_data['scan_id'] = new_scan_id
+                result = ScanResult(**scan_data)
+                self.session.add(result)
+                logger.info(f"Created new scan result (duplicate avoided): {new_scan_id}")
             else:
                 # 새로 생성
                 result = ScanResult(**scan_data)

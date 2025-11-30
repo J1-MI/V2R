@@ -837,20 +837,38 @@ def show_report_generation():
 
             if st.button("리포트 생성"):
                 with st.spinner("리포트 생성 중..."):
-                    # 리포트 생성기 초기화
-                    report_generator = ReportGenerator()
+                    try:
+                        # 리포트 생성기 초기화
+                        report_generator = ReportGenerator()
+                        
+                        # LLM 연결 확인 및 상세 정보 표시
+                        llm_gen = report_generator.llm_generator
+                        if not llm_gen.client:
+                            st.warning("⚠️ LLM이 연결되지 않았습니다.")
+                            if not llm_gen.api_key:
+                                st.error("❌ OPENAI_API_KEY가 설정되지 않았습니다.")
+                                st.info("💡 .env 파일에 OPENAI_API_KEY를 추가하거나 환경 변수로 설정하세요.")
+                            else:
+                                st.error(f"❌ LLM 초기화 실패 (API Key 길이: {len(llm_gen.api_key)})")
+                                st.info("💡 OpenAI API 키가 유효한지 확인하세요.")
+                            st.info("LLM 없이 리포트를 생성합니다 (Executive Summary는 기본 템플릿 사용).")
+                        else:
+                            st.success(f"✅ LLM 연결 성공 (모델: {llm_gen.model})")
 
-                    # 리포트 생성
-                    report_id = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    result = report_generator.generate_report(
-                        report_id=report_id,
-                        scan_results=[s.to_dict() for s in scan_results],
-                        poc_reproductions=[p.to_dict() for p in poc_reproductions]
-                    )
+                        # 리포트 생성
+                        report_id = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                        result = report_generator.generate_report(
+                            report_id=report_id,
+                            scan_results=[s.to_dict() for s in scan_results],
+                            poc_reproductions=[p.to_dict() for p in poc_reproductions]
+                        )
 
-                    if result.get("success"):
-                        st.success(f"리포트 생성 완료: {result.get('file_path')}")
-                        st.info(f"파일 크기: {result.get('file_size')} bytes")
+                        if result.get("success"):
+                            st.success(f"리포트 생성 완료: {result.get('file_path')}")
+                            st.info(f"파일 크기: {result.get('file_size')} bytes")
+                    except Exception as e:
+                        st.error(f"리포트 생성 실패: {str(e)}")
+                        logger.error(f"리포트 생성 중 오류: {str(e)}", exc_info=True)
 
                         # 다운로드 버튼
                         report_path = Path(result.get("file_path"))

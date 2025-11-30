@@ -47,8 +47,9 @@ def generate_scan_id(scanner_name: str, target: str, suffix: Optional[str] = Non
     Returns:
         고유한 스캔 ID
     """
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
+    # UUID를 먼저 생성하여 고유성 보장 (타임스탬프보다 먼저)
     unique_id = str(uuid.uuid4())[:8]  # UUID 앞 8자리
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
     safe_target = sanitize_target_name(target)
     
     # 접미사 처리
@@ -58,9 +59,11 @@ def generate_scan_id(scanner_name: str, target: str, suffix: Optional[str] = Non
             suffix = hashlib.md5(suffix.encode()).hexdigest()[:8]
         else:
             suffix = suffix.replace(",", "_").replace("-", "_").replace(" ", "_")
-        return f"{scanner_name}_{safe_target}_{suffix}_{timestamp}_{unique_id}"
+        # UUID를 앞에 배치하여 고유성 강화
+        return f"{scanner_name}_{safe_target}_{suffix}_{unique_id}_{timestamp}"
     
-    return f"{scanner_name}_{safe_target}_{timestamp}_{unique_id}"
+    # UUID를 앞에 배치하여 고유성 강화
+    return f"{scanner_name}_{safe_target}_{unique_id}_{timestamp}"
 
 
 def generate_session_id(prefix: str, target_name: Optional[str] = None, 

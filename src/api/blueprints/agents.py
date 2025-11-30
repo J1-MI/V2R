@@ -351,7 +351,7 @@ def create_task(agent_id: str):
     
     Request Body:
         {
-            "task_type": str,  # DOCKER_STATUS, FULL_SCAN, CCE_CHECK
+            "task_type": str,  # DOCKER_STATUS, FULL_SCAN, CCE_CHECK, DB_INIT
             "parameters": dict (optional)
         }
     
