@@ -19,6 +19,7 @@ from src.pipeline.poc_pipeline import POCPipeline
 from src.scanner.vulnerability_checker import VulnerabilityChecker
 from src.database.connection import get_db, initialize_database
 from src.database.repository import ScanResultRepository
+from src.cce.checker import run_cce_checks_for_all_containers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,17 +31,19 @@ logger = logging.getLogger(__name__)
 class CVELabScanner:
     """CVE-Lab 전체 스캔 클래스"""
     
-    def __init__(self, fast_mode: bool = True, enable_poc: bool = True):
+    def __init__(self, fast_mode: bool = True, enable_poc: bool = True, enable_cce: bool = True):
         """
         Args:
             fast_mode: 빠른 스캔 모드 (타임아웃 단축, rate-limit 증가)
             enable_poc: PoC 재현 활성화 여부
+            enable_cce: CCE 점검 활성화 여부
         """
         self.scanner_pipeline = ScannerPipeline()
         self.vuln_checker = VulnerabilityChecker()
         self.poc_pipeline = POCPipeline() if enable_poc else None
         self.fast_mode = fast_mode
         self.enable_poc = enable_poc
+        self.enable_cce = enable_cce
         
         # CVE-Lab 서비스 정의
         self.services = {
@@ -50,7 +53,8 @@ class CVELabScanner:
                 "port": 8081,
                 "url": "http://host.docker.internal:8081",
                 "type": "http",
-                "cve": "CVE-2018-100861"
+                "cve": "CVE-2018-100861",
+                "container_pattern": ["jenkins", "cve-lab-jenkins"]
             },
             "elasticsearch": {
                 "name": "Elasticsearch",
@@ -58,15 +62,17 @@ class CVELabScanner:
                 "port": 9200,
                 "url": "http://host.docker.internal:9200",
                 "type": "http",
-                "cve": "CVE-2015-1427"
+                "cve": "CVE-2015-1427",
+                "container_pattern": ["elasticsearch", "cve-lab-elasticsearch"]
             },
-            "log4shell": {
-                "name": "Log4Shell",
+            "log4j": {
+                "name": "Log4j",
                 "host": "host.docker.internal",
                 "port": 8085,
                 "url": "http://host.docker.internal:8085",
                 "type": "http",
-                "cve": "CVE-2021-44228"
+                "cve": "CVE-2021-44228",
+                "container_pattern": ["log4shell", "cve-lab-log4shell", "log4j", "log4j-vuln"]
             },
             "redis": {
                 "name": "Redis",
@@ -74,7 +80,8 @@ class CVELabScanner:
                 "port": 6379,
                 "url": None,
                 "type": "redis",
-                "cve": None
+                "cve": None,
+                "container_pattern": ["redis", "cve-lab-redis"]
             },
             "mongodb": {
                 "name": "MongoDB",
@@ -82,7 +89,8 @@ class CVELabScanner:
                 "port": 27017,
                 "url": None,
                 "type": "mongodb",
-                "cve": None
+                "cve": None,
+                "container_pattern": ["mongodb", "cve-lab-mongodb", "mongo"]
             }
         }
     
@@ -107,7 +115,7 @@ class CVELabScanner:
             results = self._scan_parallel()
         else:
             # 순차 스캔
-            # 1. HTTP 서비스 (Jenkins, Elasticsearch, Log4Shell) - 포트 스캔 + Nuclei 스캔
+            # 1. HTTP 서비스 (Jenkins, Elasticsearch, Log4j) - 포트 스캔 + Nuclei 스캔
             for service_id, service_info in self.services.items():
                 if service_info["type"] == "http":
                     logger.info(f"\n{'=' * 80}")
@@ -129,7 +137,25 @@ class CVELabScanner:
         
         elapsed_time = time.time() - start_time
         
-        # 3. 결과 요약
+        # 3. CCE 점검 실행 (Docker 컨테이너 대상) - 옵션 활성화 시에만
+        if self.enable_cce:
+            logger.info("\n" + "=" * 80)
+            logger.info("CCE 점검 시작 (Docker 컨테이너 대상)")
+            logger.info("=" * 80)
+            try:
+                cce_result = run_cce_checks_for_all_containers()
+                if cce_result.get("success"):
+                    logger.info(f"✅ CCE 점검 완료: {len(cce_result.get('containers', []))}개 컨테이너")
+                else:
+                    logger.warning(f"⚠️  CCE 점검 실패: {cce_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.warning(f"⚠️  CCE 점검 중 오류 발생: {str(e)}")
+        else:
+            logger.info("\n" + "=" * 80)
+            logger.info("CCE 점검 건너뜀 (--no-cce 옵션)")
+            logger.info("=" * 80)
+        
+        # 4. 결과 요약
         self.print_summary(results, elapsed_time)
         
         return results
@@ -221,25 +247,31 @@ class CVELabScanner:
         # 2. Nuclei 취약점 스캔 (EPSS 기반 고위험 취약점)
         logger.info(f"[2/2] Nuclei 취약점 스캔: {url}")
         try:
-            # Elasticsearch의 경우 특정 템플릿만 사용하여 속도 향상
+            # 서비스별 특정 템플릿만 사용하여 속도 향상 및 타임아웃 방지
             template_files = None
-            if "9200" in url or "elasticsearch" in url.lower():
-                # Elasticsearch 관련 템플릿만 사용
-                from pathlib import Path
-                templates_path = Path("/usr/local/bin/nuclei-templates")
-                if templates_path.exists():
-                    # Elasticsearch 관련 템플릿 찾기
+            from pathlib import Path
+            templates_path = Path("/usr/local/bin/nuclei-templates")
+            
+            if templates_path.exists():
+                # Elasticsearch의 경우 특정 템플릿만 사용
+                if "9200" in url or "elasticsearch" in url.lower():
                     elastic_templates = list(templates_path.rglob("*elasticsearch*.yaml"))
                     if elastic_templates:
                         template_files = [str(t) for t in elastic_templates[:5]]  # 최대 5개만
                         logger.info(f"Elasticsearch 전용 템플릿 사용: {len(template_files)}개")
+                # Jenkins의 경우 특정 템플릿만 사용하여 타임아웃 방지
+                elif "8081" in url or "jenkins" in url.lower():
+                    jenkins_templates = list(templates_path.rglob("*jenkins*.yaml"))
+                    if jenkins_templates:
+                        template_files = [str(t) for t in jenkins_templates[:10]]  # 최대 10개만
+                        logger.info(f"Jenkins 전용 템플릿 사용: {len(template_files)}개")
             
             # CVE 템플릿 + Critical/High 심각도 필터
             # 빠른 모드: rate-limit 증가 (기본값 300 -> 500)
             nuclei_result = self.scanner_pipeline.run_nuclei_scan(
                 target=url,
                 severity=["critical", "high"],
-                template_files=template_files,  # Elasticsearch의 경우 특정 템플릿만
+                template_files=template_files,  # Elasticsearch/Jenkins의 경우 특정 템플릿만
                 save_to_db=True
             )
             result["nuclei_scan"] = nuclei_result
@@ -457,7 +489,7 @@ class CVELabScanner:
         """
         poc_scripts = {
             "CVE-2021-44228": f"""
-# Log4Shell (CVE-2021-44228) PoC
+# Log4j (CVE-2021-44228) PoC
 # 대상: {target_url}
 
 import sys
@@ -510,7 +542,7 @@ try:
             print(f"POST 요청 실패: {{str(e)}}")
     
     if success:
-        print("Log4Shell 취약점 재현 성공: 페이로드가 서버로 전송되었습니다.")
+        print("Log4j 취약점 재현 성공: 페이로드가 서버로 전송되었습니다.")
         sys.exit(0)
     else:
         print("PoC 실행 실패: 요청을 전송할 수 없었습니다.")
@@ -623,6 +655,11 @@ def main():
         action="store_true",
         help="PoC 재현 비활성화"
     )
+    parser.add_argument(
+        "--no-cce",
+        action="store_true",
+        help="CCE 점검 비활성화"
+    )
     args = parser.parse_args()
     
     # 데이터베이스 리셋 또는 초기화
@@ -641,7 +678,12 @@ def main():
         logger.info("✓ 데이터베이스 초기화 완료")
     
     # 스캔 실행
-    scanner = CVELabScanner(fast_mode=not args.no_fast, enable_poc=not args.no_poc)
+    enable_cce = not args.no_cce  # --no-cce가 없으면 활성화 (기본값: 활성화)
+    scanner = CVELabScanner(
+        fast_mode=not args.no_fast,
+        enable_poc=not args.no_poc,
+        enable_cce=enable_cce
+    )
     results = scanner.scan_all(parallel=not args.no_parallel)
     
     logger.info("\n✓ CVE-Lab 전체 스캔 완료")

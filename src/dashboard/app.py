@@ -11,8 +11,8 @@ from pathlib import Path
 from datetime import datetime
 
 from src.database import get_db, initialize_database
-from src.database.repository import ScanResultRepository, POCReproductionRepository
-from src.database.models import POCReproduction, POCMetadata
+from src.database.repository import ScanResultRepository, POCReproductionRepository, CCECheckResultRepository
+from src.database.models import POCReproduction, POCMetadata, CCECheckResult
 from src.report import ReportGenerator
 from src.llm import LLMReportGenerator
 from sqlalchemy.exc import ProgrammingError
@@ -37,7 +37,7 @@ def main():
         st.header("메뉴")
         page = st.radio(
             "페이지 선택",
-            ["대시보드", "취약점 리스트", "PoC 재현 결과", "리포트 생성"]
+            ["대시보드", "취약점 리스트", "PoC 재현 결과", "CCE 점검 결과", "리포트 생성"]
         )
 
     # 페이지 라우팅
@@ -47,6 +47,8 @@ def main():
         show_vulnerability_list()
     elif page == "PoC 재현 결과":
         show_poc_reproductions()
+    elif page == "CCE 점검 결과":
+        show_cce_checks()
     elif page == "리포트 생성":
         show_report_generation()
 
@@ -91,41 +93,66 @@ def show_dashboard():
                 )
                 st.bar_chart(severity_df.set_index("심각도"))
 
-            # 최근 스캔 결과 (전체 / 최신 1건 탭 분리)
+            # 최근 스캔 결과 (전체 / 최신 그룹 탭 분리)
             st.subheader("최근 스캔 결과")
-            recent_scans = repo.get_recent(days=7, limit=50)
+            recent_scans = repo.get_recent(days=7, limit=100)
+            latest_scan_group = repo.get_latest_scan_group()
 
-            tab_all, tab_latest = st.tabs(["📄 전체 최근 스캔", "🕒 가장 최근 1건"])
+            tab_all, tab_latest = st.tabs(["📄 전체 최근 스캔", "🕒 가장 최근 스캔 그룹"])
 
             with tab_all:
                 if recent_scans:
                     scan_data = []
                     for scan in recent_scans:
+                        # Windows 시스템 시간대 고려하여 표시
+                        from datetime import timezone
+                        if scan.scan_timestamp.tzinfo is None:
+                            # timezone이 없으면 UTC로 가정
+                            scan_time = scan.scan_timestamp.replace(tzinfo=timezone.utc)
+                        else:
+                            scan_time = scan.scan_timestamp
+                        
                         scan_data.append({
                             "스캔 ID": (scan.scan_id[:20] + "...") if len(scan.scan_id) > 20 else scan.scan_id,
                             "대상": scan.target_host,
                             "스캐너": scan.scanner_name,
-                            "심각도": scan.severity,
+                            "심각도": scan.severity or "Unknown",
                             "상태": scan.status,
-                            "스캔 시간": scan.scan_timestamp.strftime("%Y-%m-%d %H:%M")
+                            "스캔 시간": scan_time.strftime("%Y-%m-%d %H:%M:%S")
                         })
-                    st.dataframe(pd.DataFrame(scan_data), use_container_width=True)
+                    
+                    # 심각도 순으로 정렬
+                    severity_order = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2, "Info": 1, "Unknown": 0}
+                    scan_df = pd.DataFrame(scan_data)
+                    scan_df["심각도_순서"] = scan_df["심각도"].map(severity_order).fillna(0)
+                    scan_df = scan_df.sort_values("심각도_순서", ascending=False).drop("심각도_순서", axis=1)
+                    
+                    st.dataframe(scan_df, width='stretch')
                 else:
                     st.info("최근 스캔 결과가 없습니다.")
 
             with tab_latest:
-                if recent_scans:
-                    latest = recent_scans[0]  # get_recent가 최신순 정렬
-                    latest_data = [{
-                        "스캔 ID": latest.scan_id,
-                        "대상": latest.target_host,
-                        "스캐너": latest.scanner_name,
-                        "심각도": latest.severity,
-                        "상태": latest.status,
-                        "스캔 시간": latest.scan_timestamp.strftime("%Y-%m-%d %H:%M")
-                    }]
-                    st.write("가장 최근 스캔 1건")
-                    st.table(pd.DataFrame(latest_data))
+                if latest_scan_group:
+                    st.write(f"**가장 최근 스캔 그룹** (총 {len(latest_scan_group)}건)")
+                    scan_data = []
+                    for scan in latest_scan_group:
+                        from datetime import timezone
+                        if scan.scan_timestamp.tzinfo is None:
+                            scan_time = scan.scan_timestamp.replace(tzinfo=timezone.utc)
+                        else:
+                            scan_time = scan.scan_timestamp
+                        
+                        scan_data.append({
+                            "스캔 ID": scan.scan_id,
+                            "대상": scan.target_host,
+                            "스캐너": scan.scanner_name,
+                            "심각도": scan.severity or "Unknown",
+                            "상태": scan.status,
+                            "스캔 시간": scan_time.strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                    
+                    # 이미 심각도 순으로 정렬되어 있음
+                    st.dataframe(pd.DataFrame(scan_data), width='stretch')
                 else:
                     st.info("스캔 결과가 아직 없습니다.")
 
@@ -287,7 +314,7 @@ def show_vulnerability_list():
 
             if vulnerabilities:
                 df = pd.DataFrame(vulnerabilities)
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width='stretch')
 
                 # 증거 다운로드
                 st.subheader("증거 다운로드")
@@ -379,7 +406,7 @@ def show_poc_reproductions():
                     })
 
                 df = pd.DataFrame(poc_data)
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width='stretch')
 
                 # 상세 정보
                 if st.checkbox("상세 정보 표시"):
@@ -440,6 +467,190 @@ def show_poc_reproductions():
     except Exception as e:
         st.error(f"PoC 재현 결과 로드 실패: {str(e)}")
         logger.error(f"POC reproduction error: {str(e)}")
+
+
+def show_cce_checks():
+    """CCE 점검 결과 화면"""
+    st.header("🛡️ CCE 점검 결과")
+
+    try:
+        db = get_db()
+        with db.get_session() as session:
+            repo = CCECheckResultRepository(session)
+
+            # 최근 점검 세션 목록
+            recent_sessions = repo.get_recent_sessions(limit=20)
+            latest_session = repo.get_latest_session()
+
+            if not recent_sessions:
+                st.info("CCE 점검 결과가 없습니다.")
+                st.info("💡 팁: CCE 점검 스크립트를 실행하면 결과가 여기에 표시됩니다.")
+                return
+
+            # 세션 정보 조회 (점검 대상 이름 포함)
+            session_info_list = []
+            for session_id in recent_sessions:
+                try:
+                    info = repo.get_session_info(session_id)
+                    if info:
+                        session_info_list.append(info)
+                    else:
+                        # 세션 정보가 없어도 세션 ID로 표시
+                        session_info_list.append({
+                            "session_id": session_id,
+                            "target_name": session_id.split("_")[1].capitalize() if "_" in session_id else "알 수 없음",
+                            "check_timestamp": None,
+                            "total_checks": 0
+                        })
+                except Exception as e:
+                    # 세션 정보 조회 실패 시에도 세션 ID만으로 표시
+                    logger.warning(f"Failed to get session info for {session_id}: {str(e)}")
+                    session_info_list.append({
+                        "session_id": session_id,
+                        "target_name": session_id.split("_")[1].capitalize() if "_" in session_id else "알 수 없음",
+                        "check_timestamp": None,
+                        "total_checks": 0
+                    })
+            
+            # 세션 선택 (점검 대상 이름 표시)
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                # 세션 선택 옵션 생성 (점검 대상 이름 포함)
+                session_options = []
+                for info in session_info_list:
+                    target_display = info['target_name'] or "알 수 없음"
+                    timestamp = info['check_timestamp'].strftime("%Y-%m-%d %H:%M") if info['check_timestamp'] else ""
+                    session_options.append(f"{target_display} ({timestamp})")
+                
+                if session_options:
+                    selected_idx = 0
+                    if latest_session:
+                        for i, info in enumerate(session_info_list):
+                            if info['session_id'] == latest_session:
+                                selected_idx = i
+                                break
+                    
+                    selected_display = st.selectbox(
+                        "점검 세션 선택",
+                        session_options,
+                        index=selected_idx,
+                        help="같은 실행에서 생성된 점검 결과들을 그룹화한 세션입니다."
+                    )
+                    # 선택된 세션 ID 찾기
+                    selected_idx = session_options.index(selected_display)
+                    selected_session = session_info_list[selected_idx]['session_id']
+                else:
+                    selected_session = recent_sessions[0] if recent_sessions else None
+            with col2:
+                if st.button("🔄 최신 세션"):
+                    selected_session = latest_session
+                    st.rerun()
+            
+            # 선택된 세션의 점검 대상 정보 표시
+            if selected_session:
+                session_info = repo.get_session_info(selected_session)
+                if session_info:
+                    st.info(f"**점검 대상**: {session_info['target_name'] or '알 수 없음'} | **점검 시간**: {session_info['check_timestamp'].strftime('%Y-%m-%d %H:%M:%S') if session_info['check_timestamp'] else 'N/A'} | **총 점검 항목**: {session_info['total_checks']}개")
+
+            # 선택된 세션의 점검 결과 조회
+            check_results = repo.get_by_session(selected_session)
+
+            if check_results:
+                # 통계 표시
+                stats = repo.get_statistics(selected_session)
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("총 점검 항목", stats.get("total", 0))
+                with col2:
+                    양호 = stats.get("by_result", {}).get("양호", 0)
+                    st.metric("양호", 양호, delta=None)
+                with col3:
+                    취약 = stats.get("by_result", {}).get("취약", 0)
+                    st.metric("취약", 취약, delta=None, delta_color="inverse")
+                with col4:
+                    na = stats.get("by_result", {}).get("NOT_APPLICABLE", 0)
+                    st.metric("해당 없음", na)
+
+                # 점검 결과 테이블
+                st.subheader("점검 결과 상세")
+                
+                # 필터 옵션
+                col1, col2 = st.columns(2)
+                with col1:
+                    result_filter = st.selectbox(
+                        "결과 필터",
+                        ["전체", "양호", "취약", "NOT_APPLICABLE"]
+                    )
+                with col2:
+                    severity_filter = st.selectbox(
+                        "심각도 필터",
+                        ["전체", "5", "4", "3", "2", "1"]
+                    )
+
+                # 필터링
+                filtered_results = check_results
+                if result_filter != "전체":
+                    filtered_results = [r for r in filtered_results if r.result == result_filter]
+                if severity_filter != "전체":
+                    filtered_results = [r for r in filtered_results if r.severity == int(severity_filter)]
+
+                if filtered_results:
+                    # 데이터프레임 생성
+                    check_data = []
+                    for check in filtered_results:
+                        check_data.append({
+                            "CCE ID": check.cce_id,
+                            "평가항목": check.check_name,
+                            "심각도": check.severity or "N/A",
+                            "결과": check.result,
+                            "점검 시간": check.check_timestamp.strftime("%Y-%m-%d %H:%M:%S") if check.check_timestamp else "N/A"
+                        })
+                    
+                    df = pd.DataFrame(check_data)
+                    
+                    # 심각도 순으로 정렬
+                    df["심각도_순서"] = df["심각도"].replace({"N/A": 0}).astype(int)
+                    df = df.sort_values("심각도_순서", ascending=False).drop("심각도_순서", axis=1)
+                    
+                    st.dataframe(df, width='stretch')
+
+                    # 상세 정보
+                    if st.checkbox("상세 정보 표시"):
+                        selected_cce_id = st.selectbox("CCE ID 선택", df["CCE ID"].tolist())
+                        selected_check = next((c for c in filtered_results if c.cce_id == selected_cce_id), None)
+                        
+                        if selected_check:
+                            st.subheader(f"상세 정보: {selected_check.cce_id}")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**CCE ID**: {selected_check.cce_id}")
+                                st.write(f"**평가항목**: {selected_check.check_name}")
+                                st.write(f"**심각도**: {selected_check.severity or 'N/A'}")
+                                st.write(f"**결과**: {selected_check.result}")
+                            with col2:
+                                st.write(f"**점검 시간**: {selected_check.check_timestamp}")
+                                st.write(f"**점검 대상**: {selected_check.target_name or '알 수 없음'}")
+                                st.write(f"**세션 ID**: {selected_check.check_session_id}")
+                            
+                            st.subheader("명령 실행 결과")
+                            st.code(selected_check.detail or "결과 없음", language="text")
+                else:
+                    st.info("필터 조건에 맞는 점검 결과가 없습니다.")
+            else:
+                st.info("선택한 세션에 점검 결과가 없습니다.")
+
+    except ProgrammingError as e:
+        if "does not exist" in str(e) or "relation" in str(e).lower():
+            st.warning("⚠️ 데이터베이스 테이블이 존재하지 않습니다. 데이터베이스를 초기화하세요.")
+            st.info("대시보드 페이지에서 '데이터베이스 초기화' 버튼을 클릭하거나 다음 명령어를 실행하세요:")
+            st.code("docker exec v2r-app python scripts/utils/reset_db.py", language="bash")
+        else:
+            st.error(f"CCE 점검 결과 로드 실패: {str(e)}")
+            logger.error(f"CCE check error: {str(e)}")
+    except Exception as e:
+        st.error(f"CCE 점검 결과 로드 실패: {str(e)}")
+        logger.error(f"CCE check error: {str(e)}")
 
 
 def show_report_generation():

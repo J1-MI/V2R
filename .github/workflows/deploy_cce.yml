@@ -1,0 +1,90 @@
+name: CCE Compliance Check on EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  cce-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Copy files to EC2
+        run: |
+          scp -i ~/.ssh/id_rsa \
+            data.json \
+            scripts/cce_checks.sh \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/V2R/scripts/
+      
+      - name: Execute CCE checks on EC2
+        run: |
+          ssh -i ~/.ssh/id_rsa \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/V2R
+            chmod +x scripts/cce_checks.sh
+            
+            # jq 설치 확인 및 설치
+            if ! command -v jq &> /dev/null; then
+              if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y jq
+              elif command -v yum &> /dev/null; then
+                sudo yum install -y jq
+              fi
+            fi
+            
+            # CCE 점검 실행 (JSON 출력)
+            ./scripts/cce_checks.sh --json > cce_results.json 2>&1 || true
+            
+            # 결과 확인
+            if [[ -f cce_results.json ]]; then
+              echo "✅ CCE 점검 완료"
+              wc -l cce_results.json
+            else
+              echo "❌ CCE 점검 실패"
+              exit 1
+            fi
+          EOF
+      
+      - name: Download results from EC2
+        run: |
+          scp -i ~/.ssh/id_rsa \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/V2R/cce_results.json \
+            ./cce_results.json || true
+      
+      - name: Upload results as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cce-compliance-results
+          path: |
+            cce_results.json
+          retention-days: 30
+      
+      - name: Display results summary
+        if: always()
+        run: |
+          if [[ -f cce_results.json ]]; then
+            echo "## CCE 점검 결과 요약" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "총 점검 항목: $(wc -l < cce_results.json)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 점검 결과 샘플 (최대 10개)" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            head -10 cce_results.json | jq -r '.' >> $GITHUB_STEP_SUMMARY || head -10 cce_results.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ 결과 파일을 찾을 수 없습니다." >> $GITHUB_STEP_SUMMARY
+          fi
+

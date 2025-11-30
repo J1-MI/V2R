@@ -64,13 +64,12 @@ graph TD
 
 **프로젝트 특성:** 1인 개발 프로젝트로 진행됩니다.
 
-**최종 수정 일자:** 2025-01-XX (1주일 완성 계획 구현 완료)
+**최종 수정 일자:** 2025-01-30 (프로젝트 구조 리팩터링 완료)
 
 - 상세 변경 이력은 `CHANGELOG.md`를 참고하세요.
-- **로컬 PC 실행 가이드**: `QUICK_START_LOCAL.md` (권장)
-- **로컬 Docker 설정**: `docs/LOCAL_DOCKER_SETUP.md` 참조
-- **EC2 사용 가이드**: `docs/EC2_USAGE.md` (CCE 점검 및 클라우드 데모)
-- **프로젝트 진행률**: `docs/PROGRESS_ANALYSIS.md` 참조
+- **프로젝트 개요**: `docs/PROJECT_OVERVIEW.md` 참조
+- **빠른 시작**: `docs/QUICK_START.md` 참조
+- **프로젝트 구조**: `docs/PROJECT_STRUCTURE.md` 참조
 
 ## 목차
 - [1. 기획 의도 및 목표](#1-기획-의도-및-목표)  
@@ -385,6 +384,24 @@ EC2를 대상으로 외부에서 접근 가능하다고 가정하고 스캐닝�
 - 자동 CVE 매핑과 수동 매핑 검토 일치율 ≥ 80%
 - 자동 리포트 초안 완성도 (개발자 내부적 판단)
 - 스캔 범위: 테스트 이미지 내 80% 이상
+
+---
+
+## 10. 프로젝트 구조
+
+프로젝트는 다음과 같이 구성되어 있습니다:
+
+```
+V2R/
+├── src/              # 소스 코드 (스캐너, 파이프라인, CCE, DB, 대시보드 등)
+├── scripts/          # 실행 스크립트 (PowerShell, bash)
+├── infra/            # 인프라 설정 (Docker, Terraform)
+├── evidence/         # PoC 증적 파일
+├── reports/          # 생성된 리포트
+└── docs/             # 문서
+```
+
+상세한 구조는 `docs/PROJECT_STRUCTURE.md`를 참조하세요.
 
 ---
 

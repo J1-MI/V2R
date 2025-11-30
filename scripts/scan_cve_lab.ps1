@@ -35,7 +35,15 @@ if ($resetDb -eq "y" -or $resetDb -eq "Y") {
     Write-Host ""
 }
 
-docker exec v2r-app python scripts/test/scan_cve_lab_full.py
+# CCE 점검 옵션 확인
+$enableCce = Read-Host "CCE 점검을 수행하시겠습니까? (Y/n)"
+if ($enableCce -eq "n" -or $enableCce -eq "N") {
+    Write-Host "CCE 점검 비활성화" -ForegroundColor Yellow
+    docker exec v2r-app python scripts/test/scan_cve_lab_full.py --no-cce
+} else {
+    Write-Host "CCE 점검 활성화" -ForegroundColor Green
+    docker exec v2r-app python scripts/test/scan_cve_lab_full.py
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""

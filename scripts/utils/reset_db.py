@@ -45,6 +45,7 @@ def reset_database():
             session.execute(text("SET session_replication_role = 'replica';"))
             
             # 모든 테이블 삭제
+            session.execute(text("DROP TABLE IF EXISTS cce_check_results CASCADE;"))
             session.execute(text("DROP TABLE IF EXISTS poc_reproductions CASCADE;"))
             session.execute(text("DROP TABLE IF EXISTS poc_metadata CASCADE;"))
             session.execute(text("DROP TABLE IF EXISTS scan_results CASCADE;"))

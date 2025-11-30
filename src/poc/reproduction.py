@@ -56,7 +56,8 @@ class POCReproducer:
         try:
             # 1. 격리 환경 생성
             self.isolation = IsolationEnvironment(base_image=self.base_image)
-            container_name = f"v2r-poc-{self.reproduction_id}"
+            from src.utils.id_generator import generate_container_name
+            container_name = generate_container_name("v2r-poc", self.reproduction_id)
 
             # 환경 변수 설정
             environment = {

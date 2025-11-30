@@ -87,10 +87,29 @@ CREATE TABLE IF NOT EXISTS reports (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- CCE 점검 결과 테이블
+CREATE TABLE IF NOT EXISTS cce_check_results (
+    id BIGSERIAL PRIMARY KEY,
+    check_session_id VARCHAR(255) NOT NULL,
+    target_name VARCHAR(255),
+    container_name VARCHAR(255),
+    cce_id VARCHAR(50) NOT NULL,
+    check_name VARCHAR(500) NOT NULL,
+    severity INTEGER,
+    result VARCHAR(50) NOT NULL,
+    detail TEXT,
+    check_timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_scan_results_target ON scan_results(target_host);
 CREATE INDEX IF NOT EXISTS idx_scan_results_timestamp ON scan_results(scan_timestamp);
 CREATE INDEX IF NOT EXISTS idx_scan_results_cve ON scan_results USING GIN(cve_list);
+CREATE INDEX IF NOT EXISTS idx_cce_check_results_session ON cce_check_results(check_session_id);
+CREATE INDEX IF NOT EXISTS idx_cce_check_results_timestamp ON cce_check_results(check_timestamp);
+CREATE INDEX IF NOT EXISTS idx_cce_check_results_cce_id ON cce_check_results(cce_id);
 CREATE INDEX IF NOT EXISTS idx_poc_metadata_cve ON poc_metadata(cve_id);
 CREATE INDEX IF NOT EXISTS idx_poc_reproductions_poc ON poc_reproductions(poc_id);
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(event_timestamp);

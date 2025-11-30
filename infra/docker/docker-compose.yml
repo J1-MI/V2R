@@ -31,7 +31,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.dev
+      dockerfile: Dockerfile.dev
     container_name: v2r-app
     environment:
       # 데이터베이스 연결 (Docker 내부 네트워크 사용)
@@ -80,7 +80,7 @@ services:
   scanner:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile.dev
+      dockerfile: Dockerfile.dev
     container_name: v2r-scanner
     environment:
       DB_HOST: postgres

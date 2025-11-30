@@ -5,16 +5,17 @@
 
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc, func
+from sqlalchemy import and_, or_, desc, func, case
 
 from src.database.models import (
     ScanResult,
     POCMetadata,
     POCReproduction,
     Event,
-    Report
+    Report,
+    CCECheckResult
 )
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,24 @@ class ScanResultRepository:
 
         except Exception as e:
             self.session.rollback()
+            # 중복 키 오류인 경우 업데이트 시도
+            if "UniqueViolation" in str(e) or "duplicate key" in str(e).lower():
+                logger.warning(f"Duplicate scan_id detected, attempting update: {scan_data.get('scan_id')}")
+                try:
+                    existing = self.session.query(ScanResult).filter(
+                        ScanResult.scan_id == scan_data["scan_id"]
+                    ).first()
+                    if existing:
+                        for key, value in scan_data.items():
+                            if hasattr(existing, key) and key not in ["id", "scan_id", "created_at"]:
+                                setattr(existing, key, value)
+                        existing.updated_at = datetime.now()
+                        self.session.commit()
+                        logger.info(f"Updated existing scan result: {scan_data['scan_id']}")
+                        return existing
+                except Exception as update_error:
+                    logger.error(f"Failed to update existing scan result: {str(update_error)}")
+            
             logger.error(f"Failed to save scan result: {str(e)}")
             raise
 
@@ -99,10 +118,44 @@ class ScanResultRepository:
 
     def get_recent(self, days: int = 7, limit: int = 100) -> List[ScanResult]:
         """최근 N일간의 스캔 결과"""
-        cutoff_date = datetime.now() - timedelta(days=days)
+        # Windows 시스템 시간대 고려 (UTC로 변환)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         return self.session.query(ScanResult).filter(
             ScanResult.scan_timestamp >= cutoff_date
         ).order_by(desc(ScanResult.scan_timestamp)).limit(limit).all()
+    
+    def get_latest_scan_group(self) -> List[ScanResult]:
+        """가장 최근 스캔 그룹 조회 (같은 실행 세션에서 생성된 스캔들)"""
+        # 가장 최근 스캔의 타임스탬프를 기준으로 같은 분에 생성된 스캔들을 그룹화
+        latest_scan = self.session.query(ScanResult).order_by(
+            desc(ScanResult.scan_timestamp)
+        ).first()
+        
+        if not latest_scan:
+            return []
+        
+        # 같은 분에 생성된 스캔들을 모두 조회
+        scan_time = latest_scan.scan_timestamp
+        time_window_start = scan_time - timedelta(minutes=1)
+        time_window_end = scan_time + timedelta(minutes=1)
+        
+        return self.session.query(ScanResult).filter(
+            ScanResult.scan_timestamp >= time_window_start,
+            ScanResult.scan_timestamp <= time_window_end
+        ).order_by(
+            # 심각도 순으로 정렬 (Critical > High > Medium > Low > Info)
+            desc(
+                case(
+                    (ScanResult.severity == "Critical", 5),
+                    (ScanResult.severity == "High", 4),
+                    (ScanResult.severity == "Medium", 3),
+                    (ScanResult.severity == "Low", 2),
+                    (ScanResult.severity == "Info", 1),
+                    else_=0
+                )
+            ),
+            desc(ScanResult.scan_timestamp)
+        ).all()
 
     def search_by_cve(self, cve_id: str) -> List[ScanResult]:
         """특정 CVE ID가 포함된 스캔 결과 조회"""
@@ -240,4 +293,144 @@ class POCReproductionRepository:
     def get_successful_reproductions(self) -> List[POCReproduction]:
         """성공한 재현만 조회"""
         return self.get_by_status("success")
+
+
+class CCECheckResultRepository:
+    """CCE 점검 결과 저장소"""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def save(self, check_data: Dict[str, Any]) -> CCECheckResult:
+        """CCE 점검 결과 저장"""
+        try:
+            result = CCECheckResult(**check_data)
+            self.session.add(result)
+            self.session.commit()
+            logger.info(f"Saved CCE check result: {check_data.get('cce_id')}")
+            return result
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to save CCE check result: {str(e)}")
+            raise
+
+    def save_batch(self, check_results: List[Dict[str, Any]]) -> List[CCECheckResult]:
+        """CCE 점검 결과 일괄 저장"""
+        try:
+            results = []
+            for check_data in check_results:
+                result = CCECheckResult(**check_data)
+                self.session.add(result)
+                results.append(result)
+            self.session.commit()
+            logger.info(f"Saved {len(results)} CCE check results")
+            return results
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to save CCE check results batch: {str(e)}")
+            raise
+
+    def get_by_session(self, session_id: str) -> List[CCECheckResult]:
+        """점검 세션 ID로 조회"""
+        return self.session.query(CCECheckResult).filter(
+            CCECheckResult.check_session_id == session_id
+        ).order_by(CCECheckResult.severity.desc(), CCECheckResult.cce_id).all()
+    
+    def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """점검 세션 정보 조회 (대상 이름, 점검 시간 등)"""
+        first_result = self.session.query(CCECheckResult).filter(
+            CCECheckResult.check_session_id == session_id
+        ).first()
+        
+        if not first_result:
+            return None
+        
+        # 세션의 모든 결과에서 target_name 확인
+        target_name = first_result.target_name
+        
+        # target_name이 없으면 세션 ID에서 추출 시도
+        if not target_name:
+            # 세션 ID 형식: cce_{target}_{timestamp} 또는 cce_test_{timestamp}
+            parts = session_id.split('_')
+            if len(parts) >= 3 and parts[0] == 'cce':
+                if parts[1] == 'test':
+                    target_name = "테스트"
+                else:
+                    target_name = parts[1].capitalize()
+            else:
+                target_name = "알 수 없음"
+        
+        return {
+            "session_id": session_id,
+            "target_name": target_name,
+            "check_timestamp": first_result.check_timestamp,
+            "total_checks": self.session.query(CCECheckResult).filter(
+                CCECheckResult.check_session_id == session_id
+            ).count()
+        }
+
+    def get_recent_sessions(self, limit: int = 10) -> List[str]:
+        """최근 점검 세션 ID 목록 조회"""
+        # 서브쿼리를 사용하여 각 세션의 최신 타임스탬프를 구한 후 정렬
+        from sqlalchemy import select
+        subquery = self.session.query(
+            CCECheckResult.check_session_id,
+            func.max(CCECheckResult.check_timestamp).label('max_ts')
+        ).group_by(
+            CCECheckResult.check_session_id
+        ).subquery()
+        
+        sessions = self.session.query(
+            subquery.c.check_session_id
+        ).order_by(
+            subquery.c.max_ts.desc()
+        ).limit(limit).all()
+        return [s[0] for s in sessions]
+
+    def get_latest_session(self) -> Optional[str]:
+        """가장 최근 점검 세션 ID 조회"""
+        # 서브쿼리를 사용하여 각 세션의 최신 타임스탬프를 구한 후 정렬
+        from sqlalchemy import select
+        subquery = self.session.query(
+            CCECheckResult.check_session_id,
+            func.max(CCECheckResult.check_timestamp).label('max_ts')
+        ).group_by(
+            CCECheckResult.check_session_id
+        ).subquery()
+        
+        latest = self.session.query(
+            subquery.c.check_session_id
+        ).order_by(
+            subquery.c.max_ts.desc()
+        ).first()
+        return latest[0] if latest else None
+
+    def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """CCE 점검 결과 통계"""
+        query = self.session.query(CCECheckResult)
+        
+        if session_id:
+            query = query.filter(CCECheckResult.check_session_id == session_id)
+        
+        total = query.count()
+        by_result = {}
+        by_severity = {}
+        
+        # 결과별 통계
+        for result_type in ["양호", "취약", "NOT_APPLICABLE"]:
+            count = query.filter(CCECheckResult.result == result_type).count()
+            if count > 0:
+                by_result[result_type] = count
+        
+        # 심각도별 통계
+        for severity in range(1, 6):
+            count = query.filter(CCECheckResult.severity == severity).count()
+            if count > 0:
+                by_severity[severity] = count
+        
+        return {
+            "total": total,
+            "by_result": by_result,
+            "by_severity": by_severity
+        }
 

@@ -72,10 +72,9 @@ class NucleiScanner:
             }
 
         self.target = target
-        # 밀리초 포함하여 중복 방지
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
-        safe_target = target.replace('://', '_').replace('/', '_').replace(':', '_')
-        self.scan_id = f"nuclei_{safe_target}_{timestamp}"
+        # 공통 ID 생성 유틸리티 사용
+        from src.utils.id_generator import generate_scan_id
+        self.scan_id = generate_scan_id("nuclei", target)
 
         logger.info(f"Starting Nuclei scan: target={target}")
 

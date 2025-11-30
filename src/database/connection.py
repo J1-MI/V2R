@@ -246,16 +246,8 @@ def initialize_database(schema_file: Optional[str] = None) -> bool:
         logger.error("Database connection failed, cannot initialize")
         return False
 
-    # 이미 스키마가 생성되어 있으면 schema.sql 재실행을 생략
-    try:
-        inspector = inspect(db.engine)
-        tables = inspector.get_table_names()
-        if "scan_results" in tables and "poc_reproductions" in tables:
-            logger.info("Database schema already initialized, skipping schema.sql execution")
-            return True
-    except Exception as e:
-        # 스키마 상태를 확인하지 못한 경우에만 기존 방식대로 진행
-        logger.warning(f"Failed to inspect existing schema (will try to run schema.sql): {e}")
-
+    # 스키마 파일을 항상 실행하여 모든 테이블이 생성되도록 보장
+    # (IF NOT EXISTS로 인해 이미 존재하는 테이블은 건너뜀)
+    logger.info("Executing database schema file...")
     return db.execute_sql_file(str(schema_file))
 

@@ -214,3 +214,40 @@ class Report(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
+
+class CCECheckResult(Base):
+    """CCE 점검 결과 테이블 모델"""
+    __tablename__ = "cce_check_results"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    check_session_id = Column(String(255), nullable=False, index=True)  # 점검 세션 ID (같은 실행에서 생성된 점검들을 그룹화)
+    target_name = Column(String(255))  # 점검 대상 이름 (예: "Mongo", "Jenkins", "EC2-Server-01" 등)
+    container_name = Column(String(255))  # Docker 컨테이너 이름 (예: "cve-lab-jenkins", "cve-lab-mongodb" 등)
+    cce_id = Column(String(50), nullable=False, index=True)  # CCE-LNX-001 형식
+    check_name = Column(String(500), nullable=False)  # 평가항목
+    severity = Column(Integer)  # 위험도 (1-5)
+    result = Column(String(50), nullable=False)  # 양호, 취약, NOT_APPLICABLE
+    detail = Column(Text)  # 명령 실행 결과
+    check_timestamp = Column(TIMESTAMP, nullable=False, default=func.now(), index=True)
+    created_at = Column(TIMESTAMP, default=func.now())
+    updated_at = Column(TIMESTAMP, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<CCECheckResult(cce_id={self.cce_id}, result={self.result})>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리로 변환"""
+        return {
+            "id": self.id,
+            "check_session_id": self.check_session_id,
+            "target_name": self.target_name,
+            "container_name": self.container_name,
+            "cce_id": self.cce_id,
+            "check_name": self.check_name,
+            "severity": self.severity,
+            "result": self.result,
+            "detail": self.detail,
+            "check_timestamp": self.check_timestamp.isoformat() if self.check_timestamp else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

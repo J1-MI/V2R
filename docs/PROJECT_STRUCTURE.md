@@ -1,120 +1,120 @@
-# 프로젝트 구조
+# V2R 프로젝트 구조
+
+## 디렉토리 구조
 
 ```
 V2R/
-├── .gitignore              # Git 무시 파일
-├── README.md               # 프로젝트 메인 문서
-├── PROJECT_KANBAN.md       # Kanban 보드
-├── PROJECT_STRUCTURE.md    # 이 파일
-├── requirements.txt        # Python 의존성
-│
-├── terraform/              # Terraform 인프라 코드
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── vpc.tf             # VPC/서브넷/보안그룹
-│   ├── ec2.tf             # EC2 인스턴스
-│   ├── s3.tf              # S3 버킷
-│   ├── versions.tf
-│   ├── keys/              # SSH 키 (로컬 전용)
-│   │   └── README.md
-│   ├── user_data/         # EC2 user_data 스크립트
-│   │   ├── web_server.sh
-│   │   └── scanner.sh
-│   └── README.md
-│
-├── src/                   # 소스 코드
-│   ├── __init__.py
-│   ├── config.py          # 설정 관리
-│   │
-│   ├── scanner/          # 스캐너 통합
-│   │   ├── __init__.py
-│   │   ├── nmap_scanner.py
-│   │   ├── nuclei_scanner.py
-│   │   └── normalizer.py  # 결과 정규화
-│   │
-│   ├── poc/              # PoC 재현 엔진
-│   │   ├── __init__.py
-│   │   ├── isolation.py  # 격리 환경
-│   │   ├── reproduction.py
-│   │   └── evidence.py   # 증거 수집
-│   │
-│   ├── verification/     # PoC 진위 검증
-│   │   ├── __init__.py
-│   │   ├── static_analyzer.py
-│   │   ├── behavior_matcher.py
-│   │   └── reliability.py  # 신뢰도 점수화
-│   │
-│   ├── ml/               # ML 우선순위
-│   │   ├── __init__.py
-│   │   ├── priority_model.py
-│   │   └── feature_extractor.py
-│   │
-│   ├── llm/              # LLM 리포트 생성
-│   │   ├── __init__.py
-│   │   ├── advisor.py
-│   │   └── report_generator.py
-│   │
-│   ├── report/           # 리포트 자동화
-│   │   ├── __init__.py
-│   │   ├── template.py
-│   │   ├── generator.py
-│   │   └── pr_template.py
-│   │
-│   ├── database/         # 데이터베이스 관련
-│   │   ├── __init__.py
-│   │   ├── connection.py
-│   │   ├── models.py
-│   │   └── schema.sql
-│   │
-│   └── dashboard/       # 대시보드
-│       ├── __init__.py
-│       └── app.py       # Streamlit 앱
-│
-├── scripts/              # 유틸리티 스크립트
-│   ├── deployment/      # 배포 스크립트
-│   ├── scanning/        # 스캐닝 스크립트
-│   ├── poc/             # PoC 관련
-│   └── utils/           # 유틸리티
-│
-├── docs/                 # 문서
-│   ├── POC_LIST.md      # PoC 목록
-│   ├── API.md           # API 문서
-│   └── DEPLOYMENT.md    # 배포 가이드
-│
-├── tests/                # 테스트
-│   ├── unit/
-│   ├── integration/
-│   └── fixtures/
-│
-└── evidence/            # 증거 파일 (로컬, .gitignore)
-    ├── pcap/
-    ├── logs/
-    └── screenshots/
+├── src/                          # 소스 코드
+│   ├── scanner/                  # 스캐너 모듈
+│   │   ├── nmap_scanner.py      # Nmap 스캐너
+│   │   ├── nuclei_scanner.py    # Nuclei 스캐너
+│   │   ├── vulnerability_checker.py  # 취약점 체커
+│   │   └── normalizer.py        # 결과 정규화
+│   ├── pipeline/                 # 파이프라인 모듈
+│   │   ├── scanner_pipeline.py  # 스캔 파이프라인
+│   │   └── poc_pipeline.py      # PoC 재현 파이프라인
+│   ├── cce/                      # CCE 점검 모듈
+│   │   ├── checker.py           # CCE 점검 실행
+│   │   └── generator.py         # CCE 스크립트 생성
+│   ├── database/                 # 데이터베이스 모듈
+│   │   ├── connection.py        # DB 연결
+│   │   ├── models.py            # ORM 모델
+│   │   ├── repository.py        # Repository 패턴
+│   │   └── schema.sql           # DB 스키마
+│   ├── dashboard/                # 대시보드 모듈
+│   │   └── app.py               # Streamlit 대시보드
+│   ├── poc/                      # PoC 재현 모듈
+│   │   ├── isolation.py         # 격리 환경
+│   │   ├── reproduction.py      # PoC 재현
+│   │   └── evidence.py          # 증거 수집
+│   ├── utils/                    # 공통 유틸리티
+│   │   └── id_generator.py      # ID 생성 유틸리티
+│   ├── llm/                      # LLM 모듈
+│   │   └── report_generator.py  # LLM 리포트 생성
+│   ├── report/                   # 리포트 모듈
+│   │   ├── generator.py         # 리포트 생성
+│   │   └── pr_template.py       # PR 템플릿
+│   ├── verification/             # 검증 모듈
+│   │   └── reliability.py       # 신뢰도 점수화
+│   └── config.py                # 설정 관리
+├── scripts/                      # 스크립트
+│   ├── cce_checks.sh            # CCE 점검 스크립트
+│   ├── scan_cve_lab.ps1         # CVE-Lab 스캔 스크립트
+│   ├── test/                    # 테스트 스크립트
+│   ├── utils/                   # 유틸리티 스크립트
+│   └── deployment/              # 배포 스크립트
+├── infra/                        # 인프라 설정
+│   ├── docker/                  # Docker 설정
+│   │   ├── docker-compose.yml   # 개발 환경
+│   │   ├── docker-compose.prod.yml  # 프로덕션 환경
+│   │   ├── Dockerfile           # 프로덕션 이미지
+│   │   └── Dockerfile.dev       # 개발 이미지
+│   └── terraform/               # Terraform 설정
+│       ├── main.tf
+│       ├── vpc.tf
+│       ├── ec2.tf
+│       └── user_data/
+├── evidence/                     # PoC 증적 파일
+├── reports/                      # 생성된 리포트
+├── docs/                         # 문서
+├── data.json                     # CCE 점검 데이터
+├── requirements.txt              # Python 의존성
+└── README.md                     # 프로젝트 설명
 ```
 
-## 주요 디렉토리 설명
+## 주요 모듈 설명
 
-### terraform/
-AWS 인프라를 Terraform으로 정의합니다.
+### 스캐너 모듈 (`src/scanner/`)
+- **NmapScanner**: 포트 및 서비스 스캔
+- **NucleiScanner**: 취약점 템플릿 기반 스캔
+- **VulnerabilityChecker**: 특정 취약점 체크 (Redis, MongoDB 등)
+- **ScanResultNormalizer**: 스캔 결과 정규화
 
-### src/
-모든 Python 소스 코드를 포함합니다.
-- `scanner/`: 다양한 스캐너 통합 및 정규화
-- `poc/`: PoC 재현 및 증거 수집
-- `verification/`: PoC 진위 검증
-- `ml/`: ML 모델 및 우선순위 계산
-- `llm/`: LLM 기반 리포트 생성
-- `report/`: 리포트 자동화
-- `database/`: DB 연결 및 모델
-- `dashboard/`: Streamlit 대시보드
+### 파이프라인 모듈 (`src/pipeline/`)
+- **ScannerPipeline**: 스캔 실행 → 정규화 → DB 저장 파이프라인
+- **POCPipeline**: PoC 재현 → 증거 수집 → DB 저장 파이프라인
 
-### scripts/
-자동화 스크립트 및 유틸리티
+### CCE 모듈 (`src/cce/`)
+- **checker.py**: Docker 컨테이너 대상 CCE 점검 실행
+- **generator.py**: CCE 점검 스크립트 자동 생성
 
-### docs/
-프로젝트 문서
+### 데이터베이스 모듈 (`src/database/`)
+- **connection.py**: PostgreSQL 연결 관리
+- **models.py**: SQLAlchemy ORM 모델
+- **repository.py**: Repository 패턴 구현
 
-### tests/
-단위 테스트 및 통합 테스트
+### 유틸리티 모듈 (`src/utils/`)
+- **id_generator.py**: 스캔 ID, 세션 ID, 컨테이너 이름 생성
 
+## Import 경로 규칙
+
+모든 Python 모듈은 절대 경로를 사용합니다:
+
+```python
+# ✅ 올바른 방법
+from src.scanner import NmapScanner
+from src.database import get_db
+from src.utils.id_generator import generate_scan_id
+
+# ❌ 잘못된 방법
+from .scanner import NmapScanner
+from ..database import get_db
+```
+
+## 주요 변경사항 (2025-01)
+
+1. **디렉토리 재구성**
+   - `scripts/compliance/` → `src/cce/`로 이동
+   - `terraform/` → `infra/terraform/`로 이동
+   - Docker 파일 → `infra/docker/`로 이동
+
+2. **공통 유틸리티 추가**
+   - `src/utils/id_generator.py`: ID 생성 로직 통일
+
+3. **Import 경로 통일**
+   - 모든 상대 import를 절대 import로 변경
+
+4. **중복 코드 제거**
+   - 스캔 ID 생성 로직 통일
+   - 세션 ID 생성 로직 통일
+   - 컨테이너 이름 생성 로직 통일

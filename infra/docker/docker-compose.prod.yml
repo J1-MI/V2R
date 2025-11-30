@@ -7,7 +7,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: infra/docker/Dockerfile  # 프로덕션 Dockerfile 사용
+      dockerfile: Dockerfile  # 프로덕션 Dockerfile 사용
     restart: unless-stopped
     environment:
       # 프로덕션 환경 변수는 .env.prod에서 로드

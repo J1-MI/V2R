@@ -2,12 +2,13 @@
 데이터베이스 모듈
 """
 
-from .connection import DatabaseConnection, get_db, initialize_database
-from .models import Base, ScanResult, POCMetadata, POCReproduction, Event, Report
-from .repository import (
+from src.database.connection import DatabaseConnection, get_db, initialize_database
+from src.database.models import Base, ScanResult, POCMetadata, POCReproduction, Event, Report, CCECheckResult
+from src.database.repository import (
     ScanResultRepository,
     POCMetadataRepository,
-    POCReproductionRepository
+    POCReproductionRepository,
+    CCECheckResultRepository
 )
 
 __all__ = [
@@ -20,8 +21,10 @@ __all__ = [
     "POCReproduction",
     "Event",
     "Report",
+    "CCECheckResult",
     "ScanResultRepository",
     "POCMetadataRepository",
     "POCReproductionRepository",
+    "CCECheckResultRepository",
 ]
 
