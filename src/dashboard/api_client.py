@@ -11,6 +11,9 @@ from src.config import API_SERVER_URL
 
 logger = logging.getLogger(__name__)
 
+# API 서버 기본 URL (trailing slash 제거)
+BASE_URL = API_SERVER_URL.rstrip("/")
+
 
 def get_agents() -> List[Dict[str, Any]]:
     """
@@ -20,16 +23,20 @@ def get_agents() -> List[Dict[str, Any]]:
         Agent 리스트
     """
     try:
-        url = f"{API_SERVER_URL}/api/agents"
+        url = f"{BASE_URL}/api/agents"
         response = requests.get(url, timeout=10)
+        response.raise_for_status()  # HTTP 에러 시 예외 발생
         
-        if response.status_code == 200:
-            data = response.json()
+        data = response.json()
+        if data.get("success"):
             return data.get("agents", [])
         else:
-            logger.error(f"Agent 목록 조회 실패: {response.status_code}")
+            logger.error(f"Agent 목록 조회 실패: {data.get('error', 'Unknown error')}")
             return []
     
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Agent 목록 조회 중 네트워크 오류: {str(e)}")
+        return []
     except Exception as e:
         logger.error(f"Agent 목록 조회 중 오류: {str(e)}")
         return []
@@ -48,21 +55,25 @@ def create_task(agent_id: str, task_type: str, parameters: Optional[Dict[str, An
         task_id (성공 시) 또는 None
     """
     try:
-        url = f"{API_SERVER_URL}/api/agents/{agent_id}/tasks"
+        url = f"{BASE_URL}/api/agents/{agent_id}/tasks"
         payload = {
             "task_type": task_type,
             "parameters": parameters or {}
         }
         
         response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()  # HTTP 에러 시 예외 발생
         
-        if response.status_code == 201:
-            data = response.json()
+        data = response.json()
+        if data.get("success"):
             return data.get("task_id")
         else:
-            logger.error(f"작업 생성 실패: {response.status_code} - {response.text}")
+            logger.error(f"작업 생성 실패: {data.get('error', 'Unknown error')}")
             return None
     
+    except requests.exceptions.RequestException as e:
+        logger.error(f"작업 생성 중 네트워크 오류: {str(e)}")
+        return None
     except Exception as e:
         logger.error(f"작업 생성 중 오류: {str(e)}")
         return None
@@ -80,16 +91,20 @@ def get_agent_tasks(agent_id: str, status: str = "all") -> List[Dict[str, Any]]:
         작업 리스트
     """
     try:
-        url = f"{API_SERVER_URL}/api/agents/{agent_id}/tasks?status={status}"
+        url = f"{BASE_URL}/api/agents/{agent_id}/tasks?status={status}"
         response = requests.get(url, timeout=10)
+        response.raise_for_status()  # HTTP 에러 시 예외 발생
         
-        if response.status_code == 200:
-            data = response.json()
+        data = response.json()
+        if data.get("success"):
             return data.get("tasks", [])
         else:
-            logger.error(f"작업 목록 조회 실패: {response.status_code}")
+            logger.error(f"작업 목록 조회 실패: {data.get('error', 'Unknown error')}")
             return []
     
+    except requests.exceptions.RequestException as e:
+        logger.error(f"작업 목록 조회 중 네트워크 오류: {str(e)}")
+        return []
     except Exception as e:
         logger.error(f"작업 목록 조회 중 오류: {str(e)}")
         return []
