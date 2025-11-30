@@ -4,6 +4,7 @@ OpenAI API를 사용하여 Executive Summary 및 취약점 요약을 생성합�
 """
 
 import logging
+import os
 from typing import Dict, Any, Optional, List
 import json
 
@@ -21,12 +22,14 @@ class LLMReportGenerator:
             api_key: OpenAI API 키 (None이면 config에서 읽음)
             model: LLM 모델 (None이면 config에서 읽음)
         """
-        self.api_key = api_key or OPENAI_API_KEY
-        self.model = model or LLM_MODEL
+        # API 키 우선순위: 인자 > 환경 변수 > config
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY") or OPENAI_API_KEY
+        self.model = model or os.getenv("LLM_MODEL") or LLM_MODEL
         self.client = None
 
         if not self.api_key:
-            logger.warning("OpenAI API key not provided")
+            logger.warning("OpenAI API key not provided. LLM 기능을 사용할 수 없습니다.")
+            logger.warning("환경 변수 OPENAI_API_KEY를 설정하거나 .env 파일에 추가하세요.")
         else:
             try:
                 from openai import OpenAI

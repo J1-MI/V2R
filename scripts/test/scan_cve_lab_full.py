@@ -396,6 +396,11 @@ class CVELabScanner:
                 
                 scan_id = f"vuln_check_{service_name.lower()}_{host}_{port}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 
+                # Redis 무인증 취약점은 항상 High로 설정
+                severity = finding.get("severity", "High")
+                if finding.get("type") == "redis_unauth" and finding.get("result") == "vulnerable":
+                    severity = "High"  # Redis 무인증은 항상 High
+                
                 scan_data = {
                     "scan_id": scan_id,
                     "target_host": f"{host}:{port}",
@@ -404,10 +409,13 @@ class CVELabScanner:
                     "scan_timestamp": datetime.now(),
                     "raw_result": finding,
                     "normalized_result": {
-                        "findings": [finding]
+                        "findings": [{
+                            **finding,
+                            "severity": severity  # severity 보장
+                        }]
                     },
                     "cve_list": finding.get("cve_list", []),
-                    "severity": finding.get("severity", "High")
+                    "severity": severity  # scan_result.severity도 설정
                 }
                 
                 saved_result = repo.save(scan_data)
@@ -470,6 +478,32 @@ class CVELabScanner:
                     
                     if poc_result.get("success"):
                         logger.info(f"✓ {cve} PoC 재현 성공: {poc_result.get('reproduction_id')}")
+                        
+                        # Log4j (CVE-2021-44228) PoC 재현 성공 시 severity = Critical로 업데이트
+                        if cve == "CVE-2021-44228":
+                            try:
+                                # scan_result의 severity를 Critical로 업데이트
+                                scan_result.severity = "Critical"
+                                
+                                # normalized_result의 findings도 업데이트
+                                if scan_result.normalized_result:
+                                    normalized_result = scan_result.normalized_result
+                                    if isinstance(normalized_result, dict):
+                                        findings = normalized_result.get("findings", [])
+                                        for finding in findings:
+                                            if isinstance(finding, dict):
+                                                # CVE-2021-44228 관련 finding의 severity를 Critical로 업데이트
+                                                finding_cves = finding.get("cve_list", [])
+                                                if cve in finding_cves or finding.get("type", "").lower() in ["log4j", "log4shell"]:
+                                                    finding["severity"] = "Critical"
+                                        normalized_result["findings"] = findings
+                                        scan_result.normalized_result = normalized_result
+                                
+                                session.commit()
+                                logger.info(f"✓ {cve} PoC 재현 성공: scan_result.severity를 Critical로 업데이트 완료")
+                            except Exception as e:
+                                logger.error(f"✗ {cve} PoC 재현 성공 후 severity 업데이트 실패: {str(e)}")
+                                session.rollback()
                     else:
                         logger.warning(f"✗ {cve} PoC 재현 실패: {poc_result.get('error')}")
         

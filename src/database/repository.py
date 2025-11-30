@@ -166,7 +166,10 @@ class ScanResultRepository:
         ).order_by(desc(ScanResult.scan_timestamp)).all()
 
     def get_statistics(self, target_host: Optional[str] = None) -> Dict[str, Any]:
-        """스캔 결과 통계"""
+        """
+        스캔 결과 통계
+        normalized_result.findings에서 severity를 추출하여 집계
+        """
         query = self.session.query(ScanResult)
 
         if target_host:
@@ -174,7 +177,7 @@ class ScanResultRepository:
 
         total = query.count()
         by_status = {}
-        by_severity = {}
+        by_severity = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
         by_scanner = {}
 
         # 상태별 통계
@@ -183,11 +186,43 @@ class ScanResultRepository:
             if count > 0:
                 by_status[status] = count
 
-        # 심각도별 통계
-        for severity in ["Critical", "High", "Medium", "Low", "Info"]:
-            count = query.filter(ScanResult.severity == severity).count()
-            if count > 0:
-                by_severity[severity] = count
+        # 심각도별 통계: normalized_result.findings에서 추출
+        all_scan_results = query.all()
+        for scan_result in all_scan_results:
+            # normalized_result에서 findings 추출
+            normalized_result = scan_result.normalized_result
+            if normalized_result and isinstance(normalized_result, dict):
+                findings = normalized_result.get("findings", [])
+                if findings:
+                    # 각 finding의 severity 추출
+                    for finding in findings:
+                        if isinstance(finding, dict):
+                            severity = finding.get("severity", "")
+                            if severity in by_severity:
+                                by_severity[severity] += 1
+                            elif severity:
+                                # 대소문자 구분 없이 매칭
+                                severity_lower = severity.lower()
+                                if severity_lower == "critical":
+                                    by_severity["Critical"] += 1
+                                elif severity_lower == "high":
+                                    by_severity["High"] += 1
+                                elif severity_lower == "medium":
+                                    by_severity["Medium"] += 1
+                                elif severity_lower == "low":
+                                    by_severity["Low"] += 1
+                                else:
+                                    by_severity["Info"] += 1
+            
+            # scan_result.severity도 확인 (fallback)
+            if scan_result.severity and scan_result.severity in by_severity:
+                # 이미 findings에서 집계했으므로 중복 방지
+                # 하지만 findings가 없는 경우를 대비하여 scan_result.severity도 사용
+                if not (normalized_result and isinstance(normalized_result, dict) and normalized_result.get("findings")):
+                    by_severity[scan_result.severity] += 1
+
+        # 0인 항목 제거
+        by_severity = {k: v for k, v in by_severity.items() if v > 0}
 
         # 스캐너별 통계
         scanner_stats = query.with_entities(
