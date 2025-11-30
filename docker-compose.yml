@@ -41,7 +41,7 @@ services:
       DB_USER: ${DB_USER:-v2r}
       DB_PASSWORD: ${DB_PASSWORD:-v2r_password}
       # API 서버 설정 (Docker 네트워크 내에서는 서비스 이름 사용)
-      API_SERVER_URL: ${API_SERVER_URL:-http://api:5000}
+      API_SERVER_URL: http://api:5000
       # AWS 설정
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
