@@ -39,6 +39,12 @@ MAX_CONCURRENT_SCANS = int(os.getenv("MAX_CONCURRENT_SCANS", "5"))
 # Nuclei 템플릿 경로 (Docker 내부 경로)
 NUCLEI_TEMPLATES_PATH = os.getenv("NUCLEI_TEMPLATES_PATH", "/usr/local/bin/nuclei-templates")
 
+# API 서버 설정
+API_SERVER_URL = os.getenv("API_SERVER_URL", "http://localhost:5000")
+
+# Agent 설정
+AGENT_SERVER_URL = os.getenv("AGENT_SERVER_URL", "")  # EC2 서버 URL (환경 변수로 설정)
+
 # 프로젝트 루트 경로
 PROJECT_ROOT = Path(__file__).parent.parent
 

@@ -15,6 +15,7 @@ from src.database.repository import ScanResultRepository, POCReproductionReposit
 from src.database.models import POCReproduction, POCMetadata, CCECheckResult
 from src.report import ReportGenerator
 from src.llm import LLMReportGenerator
+from src.dashboard.api_client import get_agents, create_task, get_agent_tasks
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy import desc
 
@@ -37,7 +38,7 @@ def main():
         st.header("메뉴")
         page = st.radio(
             "페이지 선택",
-            ["대시보드", "취약점 리스트", "PoC 재현 결과", "CCE 점검 결과", "리포트 생성"]
+            ["대시보드", "취약점 리스트", "PoC 재현 결과", "CCE 점검 결과", "Agent & Local Scanner", "리포트 생성"]
         )
 
     # 페이지 라우팅
@@ -49,6 +50,8 @@ def main():
         show_poc_reproductions()
     elif page == "CCE 점검 결과":
         show_cce_checks()
+    elif page == "Agent & Local Scanner":
+        show_agent_control()
     elif page == "리포트 생성":
         show_report_generation()
 
@@ -651,6 +654,116 @@ def show_cce_checks():
     except Exception as e:
         st.error(f"CCE 점검 결과 로드 실패: {str(e)}")
         logger.error(f"CCE check error: {str(e)}")
+
+
+def show_agent_control():
+    """Agent & Local Scanner 제어 화면"""
+    st.header("🤖 Agent & Local Scanner")
+    
+    try:
+        # Agent 목록 조회
+        agents = get_agents()
+        
+        if not agents:
+            st.info("등록된 Agent가 없습니다.")
+            st.info("💡 팁: 로컬 PC에서 Agent 프로그램을 실행하면 자동으로 등록됩니다.")
+            return
+        
+        # Agent 목록 표시
+        st.subheader("등록된 Agent 목록")
+        
+        for agent in agents:
+            with st.expander(f"🤖 {agent.get('agent_name', 'Unknown')} ({agent.get('agent_id', 'N/A')[:20]}...)"):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    status = agent.get("status", "offline")
+                    if status == "online":
+                        st.success(f"🟢 온라인")
+                    else:
+                        st.warning(f"🔴 오프라인")
+                
+                with col2:
+                    last_seen = agent.get("last_seen")
+                    if last_seen:
+                        st.write(f"마지막 접속: {last_seen}")
+                    else:
+                        st.write("마지막 접속: N/A")
+                
+                with col3:
+                    os_info = agent.get("os_info", {})
+                    if os_info:
+                        st.write(f"OS: {os_info.get('system', 'Unknown')} {os_info.get('release', '')}")
+                
+                # 작업 생성 버튼
+                st.subheader("작업 생성")
+                col1, col2, col3 = st.columns(3)
+                
+                agent_id = agent.get("agent_id")
+                
+                with col1:
+                    if st.button("Docker 상태 조회", key=f"docker_{agent_id}"):
+                        task_id = create_task(agent_id, "DOCKER_STATUS")
+                        if task_id:
+                            st.success(f"✅ 작업 생성 완료: {task_id}")
+                        else:
+                            st.error("❌ 작업 생성 실패")
+                
+                with col2:
+                    if st.button("전체 스캔 실행", key=f"full_scan_{agent_id}"):
+                        task_id = create_task(agent_id, "FULL_SCAN", {"fast_mode": True, "enable_poc": True, "enable_cce": False})
+                        if task_id:
+                            st.success(f"✅ 작업 생성 완료: {task_id}")
+                        else:
+                            st.error("❌ 작업 생성 실패")
+                
+                with col3:
+                    if st.button("CCE 점검 실행", key=f"cce_{agent_id}"):
+                        task_id = create_task(agent_id, "CCE_CHECK")
+                        if task_id:
+                            st.success(f"✅ 작업 생성 완료: {task_id}")
+                        else:
+                            st.error("❌ 작업 생성 실패")
+                
+                # 작업 목록 조회
+                st.subheader("작업 목록")
+                task_status = st.selectbox(
+                    "작업 상태 필터",
+                    ["all", "pending", "running", "completed", "failed"],
+                    key=f"status_{agent_id}"
+                )
+                
+                tasks = get_agent_tasks(agent_id, task_status)
+                
+                if tasks:
+                    task_data = []
+                    for task in tasks:
+                        task_data.append({
+                            "작업 ID": task.get("task_id", "N/A")[:30] + "...",
+                            "작업 타입": task.get("task_type", "N/A"),
+                            "상태": task.get("status", "N/A"),
+                            "생성 시간": task.get("created_at", "N/A")
+                        })
+                    
+                    st.dataframe(pd.DataFrame(task_data), width='stretch')
+                    
+                    # 작업 상세 정보
+                    if st.checkbox("상세 정보 표시", key=f"detail_{agent_id}"):
+                        selected_task_id = st.selectbox(
+                            "작업 선택",
+                            [task.get("task_id") for task in tasks],
+                            key=f"select_{agent_id}"
+                        )
+                        
+                        selected_task = next((t for t in tasks if t.get("task_id") == selected_task_id), None)
+                        if selected_task:
+                            st.json(selected_task)
+                else:
+                    st.info("작업이 없습니다.")
+        
+    except Exception as e:
+        st.error(f"Agent 제어 화면 로드 실패: {str(e)}")
+        logger.error(f"Agent control error: {str(e)}")
 
 
 def show_report_generation():

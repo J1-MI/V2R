@@ -405,7 +405,109 @@ V2R/
 
 ---
 
-## 10. 개발 방법론
+## 10. Agent 구조 사용법
+
+### 개요
+
+V2R 프로젝트는 로컬 PC의 Docker 기반 스캐너를 EC2 서버 대시보드에서 제어할 수 있는 Agent 구조를 지원합니다.
+
+### 아키텍처
+
+```
+[로컬 PC]                    [EC2 서버]
+┌─────────┐                 ┌──────────────┐
+│ Agent   │ ←─── 폴링 ───→  │ Flask API    │
+│ (로컬)  │                 │ (포트 5000)  │
+│         │ ←─── 결과 ───→  │              │
+└─────────┘                 └──────────────┘
+     │                            │
+     │                            │
+     ↓                            ↓
+┌─────────┐                 ┌──────────────┐
+│ Docker  │                 │ PostgreSQL   │
+│ 스캐너  │                 │ + Streamlit  │
+└─────────┘                 │ 대시보드     │
+                            └──────────────┘
+```
+
+### EC2 서버 설정
+
+1. **API 서버 실행**
+   ```bash
+   # Docker Compose로 실행
+   docker-compose up -d api
+   
+   # 또는 직접 실행
+   python src/api/run_api.py
+   ```
+
+2. **대시보드 접속**
+   - Streamlit 대시보드: `http://ec2-server-ip:8501`
+   - "Agent & Local Scanner" 페이지에서 Agent 관리
+
+### 로컬 PC Agent 설정
+
+1. **환경 변수 설정**
+   ```bash
+   # Windows PowerShell
+   $env:AGENT_SERVER_URL="http://ec2-server-ip:5000"
+   $env:AGENT_NAME="my-local-agent"
+   
+   # Linux/Mac
+   export AGENT_SERVER_URL="http://ec2-server-ip:5000"
+   export AGENT_NAME="my-local-agent"
+   ```
+
+2. **Agent 실행**
+   ```bash
+   # Python으로 직접 실행
+   python src/agent/main.py
+   
+   # 또는 스크립트 사용
+   python scripts/agent/start_agent.py
+   ```
+
+3. **Agent 등록 및 토큰 관리**
+   - Agent 최초 실행 시 자동으로 EC2 서버에 등록됩니다
+   - 등록 정보는 `~/.v2r_agent/config.json`에 자동 저장됩니다
+   - Agent 재시작 시 저장된 토큰을 자동으로 재사용합니다
+   - 토큰 검증 실패 시 자동으로 재등록합니다
+   - 설정 파일 권한: 600 (소유자만 읽기/쓰기)
+
+### 지원 작업 타입
+
+- **DOCKER_STATUS**: Docker 컨테이너 상태 조회
+- **FULL_SCAN**: 전체 스캔 실행 (Nmap + Nuclei)
+- **CCE_CHECK**: CCE 점검 실행
+
+### 대시보드에서 작업 생성
+
+1. Streamlit 대시보드의 "Agent & Local Scanner" 페이지 접속
+2. 등록된 Agent 목록 확인
+3. Agent별로 작업 생성 버튼 클릭:
+   - "Docker 상태 조회"
+   - "전체 스캔 실행"
+   - "CCE 점검 실행"
+4. 작업 결과는 대시보드에서 확인 가능
+
+### 보안
+
+- Agent 토큰은 SHA256 해시로 저장됩니다
+- 모든 API 요청은 `Authorization: Bearer <token>` 헤더를 포함해야 합니다
+- 토큰은 `~/.v2r_agent/config.json`에 저장되며, 파일 권한은 600으로 설정됩니다
+
+### EC2 배포 가이드
+
+상세한 EC2 배포 및 테스트 가이드는 `docs/EC2_DEPLOYMENT_GUIDE.md`를 참조하세요.
+
+**빠른 시작:**
+1. EC2 서버: `docker-compose up -d`
+2. 로컬 PC: `export AGENT_SERVER_URL=http://ec2-ip:5000 && python src/agent/main.py`
+3. 대시보드: `http://ec2-ip:8501` 접속
+
+---
+
+## 11. 개발 방법론
 
 ### Personal Kanban + MVP-First Iterative Development
 

@@ -15,7 +15,9 @@ from src.database.models import (
     POCReproduction,
     Event,
     Report,
-    CCECheckResult
+    CCECheckResult,
+    Agent,
+    AgentTask
 )
 
 logger = logging.getLogger(__name__)
@@ -432,5 +434,191 @@ class CCECheckResultRepository:
             "total": total,
             "by_result": by_result,
             "by_severity": by_severity
+        }
+
+
+class AgentRepository:
+    """Agent 저장소"""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def save(self, agent_data: Dict[str, Any]) -> Agent:
+        """Agent 저장"""
+        try:
+            existing = self.session.query(Agent).filter(
+                Agent.agent_id == agent_data["agent_id"]
+            ).first()
+
+            if existing:
+                for key, value in agent_data.items():
+                    if hasattr(existing, key) and key not in ["id", "agent_id", "created_at"]:
+                        setattr(existing, key, value)
+                existing.updated_at = datetime.now()
+                result = existing
+            else:
+                result = Agent(**agent_data)
+                self.session.add(result)
+
+            self.session.commit()
+            return result
+
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to save agent: {str(e)}")
+            raise
+
+    def get_by_id(self, agent_id: str) -> Optional[Agent]:
+        """Agent ID로 조회"""
+        return self.session.query(Agent).filter(
+            Agent.agent_id == agent_id
+        ).first()
+
+    def get_by_token_hash(self, token_hash: str) -> Optional[Agent]:
+        """토큰 해시로 조회"""
+        return self.session.query(Agent).filter(
+            Agent.agent_token_hash == token_hash
+        ).first()
+
+    def get_all(self, limit: int = 100) -> List[Agent]:
+        """모든 Agent 조회"""
+        return self.session.query(Agent).order_by(
+            desc(Agent.created_at)
+        ).limit(limit).all()
+
+    def update_last_seen(self, agent_id: str) -> bool:
+        """마지막 접속 시간 업데이트"""
+        try:
+            agent = self.get_by_id(agent_id)
+            if agent:
+                agent.last_seen = datetime.now()
+                agent.status = "online"
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to update last_seen: {str(e)}")
+            return False
+
+    def update_status(self, agent_id: str, status: str) -> bool:
+        """Agent 상태 업데이트"""
+        try:
+            agent = self.get_by_id(agent_id)
+            if agent:
+                agent.status = status
+                if status == "online":
+                    agent.last_seen = datetime.now()
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to update status: {str(e)}")
+            return False
+
+
+class AgentTaskRepository:
+    """Agent 작업 저장소"""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def save(self, task_data: Dict[str, Any]) -> AgentTask:
+        """작업 저장"""
+        try:
+            existing = self.session.query(AgentTask).filter(
+                AgentTask.task_id == task_data["task_id"]
+            ).first()
+
+            if existing:
+                for key, value in task_data.items():
+                    if hasattr(existing, key) and key not in ["id", "task_id", "created_at"]:
+                        setattr(existing, key, value)
+                existing.updated_at = datetime.now()
+                result = existing
+            else:
+                result = AgentTask(**task_data)
+                self.session.add(result)
+
+            self.session.commit()
+            return result
+
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to save agent task: {str(e)}")
+            raise
+
+    def get_by_id(self, task_id: str) -> Optional[AgentTask]:
+        """작업 ID로 조회"""
+        return self.session.query(AgentTask).filter(
+            AgentTask.task_id == task_id
+        ).first()
+
+    def get_by_agent_id(self, agent_id: str, status: Optional[str] = None, limit: int = 100) -> List[AgentTask]:
+        """Agent ID로 작업 조회"""
+        query = self.session.query(AgentTask).filter(
+            AgentTask.agent_id == agent_id
+        )
+
+        if status:
+            if status.lower() == "all":
+                # 모든 상태 반환
+                pass
+            else:
+                query = query.filter(AgentTask.status == status)
+
+        return query.order_by(desc(AgentTask.created_at)).limit(limit).all()
+
+    def get_pending_tasks(self, agent_id: str) -> List[AgentTask]:
+        """대기 중인 작업 조회 (기본값)"""
+        return self.get_by_agent_id(agent_id, status="pending")
+
+    def update_status(self, task_id: str, status: str, result: Optional[Dict[str, Any]] = None) -> bool:
+        """작업 상태 업데이트"""
+        try:
+            task = self.get_by_id(task_id)
+            if task:
+                task.status = status
+                if result is not None:
+                    task.result = result
+                task.updated_at = datetime.now()
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to update task status: {str(e)}")
+            return False
+
+    def get_statistics(self, agent_id: Optional[str] = None) -> Dict[str, Any]:
+        """작업 통계"""
+        query = self.session.query(AgentTask)
+
+        if agent_id:
+            query = query.filter(AgentTask.agent_id == agent_id)
+
+        total = query.count()
+        by_status = {}
+        by_type = {}
+
+        # 상태별 통계
+        for status in ["pending", "running", "completed", "failed"]:
+            count = query.filter(AgentTask.status == status).count()
+            if count > 0:
+                by_status[status] = count
+
+        # 타입별 통계
+        type_stats = query.with_entities(
+            AgentTask.task_type,
+            func.count(AgentTask.id)
+        ).group_by(AgentTask.task_type).all()
+
+        by_type = {task_type: count for task_type, count in type_stats}
+
+        return {
+            "total": total,
+            "by_status": by_status,
+            "by_type": by_type
         }
 

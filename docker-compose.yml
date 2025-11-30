@@ -66,7 +66,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "0.0.0.0:8501:8501"  # Streamlit 대시보드 (외부 접근 가능)
-      - "0.0.0.0:8000:8000"  # API 서버 (외부 접근 가능)
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +74,37 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Windows/Mac에서 호스트 접근용
     command: tail -f /dev/null  # 개발 모드: 대기 상태
+
+  # Flask API 서버
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.dev
+    container_name: v2r-api
+    environment:
+      # 데이터베이스 연결 (Docker 내부 네트워크 사용)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-v2r}
+      DB_USER: ${DB_USER:-v2r}
+      DB_PASSWORD: ${DB_PASSWORD:-v2r_password}
+      # API 서버 설정
+      API_HOST: 0.0.0.0
+      API_PORT: 5000
+      FLASK_ENV: ${FLASK_ENV:-development}
+      # Python 설정
+      PYTHONPATH: /app
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - .:/app
+    ports:
+      - "0.0.0.0:5000:5000"  # Flask API 서버 (외부 접근 가능)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - v2r-network
+    command: python src/api/run_api.py
 
   # 스캐너 전용 컨테이너 (선택)
   scanner:
