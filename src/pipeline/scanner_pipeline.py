@@ -10,7 +10,7 @@ from datetime import datetime
 from src.scanner import NmapScanner, NucleiScanner, ScanResultNormalizer
 from src.database import get_db
 from src.database.repository import ScanResultRepository
-from src.config import NUCLEI_TEMPLATES_PATH
+from src.config import NUCLEI_TEMPLATES_PATH, NUCLEI_BINARY_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +18,18 @@ logger = logging.getLogger(__name__)
 class ScannerPipeline:
     """스캐너 파이프라인 클래스"""
 
-    def __init__(self, nuclei_templates_path: Optional[str] = None):
+    def __init__(self, nuclei_path: Optional[str] = None, nuclei_templates_path: Optional[str] = None):
         """
         Args:
+            nuclei_path: Nuclei 실행 파일 경로 (None이면 config에서 읽음)
             nuclei_templates_path: Nuclei 템플릿 경로 (None이면 config에서 읽음)
         """
         self.nmap_scanner = NmapScanner()
+        
+        # Nuclei 경로 설정 (우선순위: 인자 > 환경 변수 > 기본값)
+        if nuclei_path is None:
+            nuclei_path = NUCLEI_BINARY_PATH
+        
         # 템플릿 경로 우선순위: 인자 > 환경 변수 > 기본값
         if nuclei_templates_path:
             templates_path = nuclei_templates_path
@@ -32,10 +38,10 @@ class ScannerPipeline:
         
         # 경로 존재 확인 및 로깅
         from pathlib import Path
-        templates_path_obj = Path(templates_path)
-        if templates_path_obj.exists():
+        templates_path_obj = Path(templates_path) if templates_path else None
+        if templates_path_obj and templates_path_obj.exists():
             logger.info(f"Using Nuclei templates path: {templates_path}")
-        else:
+        elif templates_path:
             logger.warning(f"Nuclei templates path does not exist: {templates_path}")
             # 기본 경로로 재시도
             default_path = "/usr/local/bin/nuclei-templates"
@@ -43,9 +49,9 @@ class ScannerPipeline:
                 templates_path = default_path
                 logger.info(f"Using default templates path: {templates_path}")
             else:
-                logger.error(f"Nuclei templates not found at {templates_path} or {default_path}")
+                logger.warning(f"Nuclei templates not found at {templates_path} or {default_path}, will try without templates path")
         
-        self.nuclei_scanner = NucleiScanner(templates_path=templates_path)
+        self.nuclei_scanner = NucleiScanner(nuclei_path=nuclei_path, templates_path=templates_path)
         self.normalizer = ScanResultNormalizer()
 
     def run_nmap_scan(

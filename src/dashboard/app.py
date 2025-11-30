@@ -757,7 +757,38 @@ def show_agent_control():
                         
                         selected_task = next((t for t in tasks if t.get("task_id") == selected_task_id), None)
                         if selected_task:
-                            st.json(selected_task)
+                            # 작업 기본 정보
+                            st.subheader("작업 정보")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**작업 ID:** {selected_task.get('task_id', 'N/A')}")
+                                st.write(f"**작업 타입:** {selected_task.get('task_type', 'N/A')}")
+                            with col2:
+                                st.write(f"**상태:** {selected_task.get('status', 'N/A')}")
+                                st.write(f"**생성 시간:** {selected_task.get('created_at', 'N/A')}")
+                            
+                            # 작업 결과 표시 (Agent가 업로드한 result)
+                            result = selected_task.get("result")
+                            if result:
+                                st.subheader("작업 결과")
+                                st.json(result)
+                                
+                                # 결과 요약 표시
+                                if isinstance(result, dict):
+                                    if result.get("success"):
+                                        st.success("✅ 작업 성공")
+                                    else:
+                                        st.error(f"❌ 작업 실패: {result.get('error', 'Unknown error')}")
+                                    
+                                    # 스캔 결과 요약
+                                    if "results" in result:
+                                        st.info(f"스캔 결과: {len(result.get('results', []))}개 항목")
+                            else:
+                                st.info("작업 결과가 아직 없습니다.")
+                            
+                            # 전체 작업 정보 (디버깅용)
+                            if st.checkbox("전체 작업 정보 표시", key=f"full_{agent_id}"):
+                                st.json(selected_task)
                 else:
                     st.info("작업이 없습니다.")
         

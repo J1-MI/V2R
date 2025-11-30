@@ -447,16 +447,38 @@ V2R 프로젝트는 로컬 PC의 Docker 기반 스캐너를 EC2 서버 대시보
 
 ### 로컬 PC Agent 설정
 
-1. **환경 변수 설정**
+1. **환경 변수 설정 (.env 파일 사용 권장)**
+   
+   프로젝트 루트에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
+   ```bash
+   # .env 파일 예시
+   AGENT_SERVER_URL=http://3.36.15.26:5000
+   AGENT_NAME=my-local-agent
+   NUCLEI_BINARY_PATH=C:\Users\user\Desktop\DEEP_DIVE\final_project\V2R\nuclei_3.5.1_windows_amd64\nuclei.exe
+   NUCLEI_TEMPLATES_DIR=C:\Users\user\Desktop\DEEP_DIVE\final_project\V2R\nuclei-templates
+   DB_HOST=3.36.15.26
+   DB_PORT=5432
+   DB_NAME=v2r
+   DB_USER=v2r
+   DB_PASSWORD=v2r_password
+   ```
+   
+   또는 환경 변수로 직접 설정:
    ```bash
    # Windows PowerShell
-   $env:AGENT_SERVER_URL="http://ec2-server-ip:5000"
+   $env:AGENT_SERVER_URL="http://3.36.15.26:5000"
    $env:AGENT_NAME="my-local-agent"
+   $env:NUCLEI_BINARY_PATH="C:\path\to\nuclei.exe"
+   $env:NUCLEI_TEMPLATES_DIR="C:\path\to\nuclei-templates"
    
    # Linux/Mac
-   export AGENT_SERVER_URL="http://ec2-server-ip:5000"
+   export AGENT_SERVER_URL="http://3.36.15.26:5000"
    export AGENT_NAME="my-local-agent"
+   export NUCLEI_BINARY_PATH="/path/to/nuclei"
+   export NUCLEI_TEMPLATES_DIR="/path/to/nuclei-templates"
    ```
+   
+   **참고:** `.env.example` 파일을 참고하여 필요한 환경 변수를 설정하세요.
 
 2. **Agent 실행**
    ```bash
