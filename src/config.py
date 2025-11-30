@@ -8,8 +8,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # .env 파일 로드
+# Docker 컨테이너 내부에서는 /app/.env 경로 사용
 env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
+if not env_path.exists():
+    # Docker 컨테이너 내부 경로 시도
+    docker_env_path = Path("/app/.env")
+    if docker_env_path.exists():
+        env_path = docker_env_path
+load_dotenv(env_path, override=True)  # override=True: 환경 변수가 이미 설정되어 있어도 .env 파일 값으로 덮어씀
 
 # AWS 설정
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")

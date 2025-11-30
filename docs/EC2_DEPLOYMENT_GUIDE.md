@@ -125,6 +125,10 @@ nano .env
 
 **.env 파일 내용:**
 ```bash
+# ============================================
+# 필수 항목
+# ============================================
+
 # 데이터베이스 설정
 DB_HOST=postgres
 DB_PORT=5432
@@ -132,19 +136,39 @@ DB_NAME=v2r
 DB_USER=v2r
 DB_PASSWORD=v2r_password_변경필요
 
-# API 서버 설정 (대시보드에서 사용)
-API_SERVER_URL=http://localhost:5000
+# API 서버 설정 (Docker 네트워크 내에서는 서비스 이름 사용)
+API_SERVER_URL=http://api:5000
 
 # Flask 환경
 FLASK_ENV=production
 
-# 선택사항: AWS, S3, LLM 설정
+# LLM 설정 (리포트 생성용 - 필수)
+OPENAI_API_KEY=sk-proj-...
+LLM_MODEL=gpt-4.1-nano
+
+# ============================================
+# 선택사항
+# ============================================
+
+# AWS 설정 (S3 사용 시)
 # AWS_REGION=ap-northeast-2
 # AWS_ACCESS_KEY_ID=
 # AWS_SECRET_ACCESS_KEY=
+
+# S3 설정 (증거 파일 저장 시)
 # S3_BUCKET_NAME=
-# OPENAI_API_KEY=
+# S3_EVIDENCE_PREFIX=evidence/
+
+# 스캐닝 설정 (기본값 사용 가능)
+# SCAN_TIMEOUT=300
+# MAX_CONCURRENT_SCANS=5
 ```
+
+**주의사항:**
+- `OPENAI_API_KEY`는 **필수**입니다 (리포트 생성 시 LLM 사용)
+- `API_SERVER_URL`은 Docker 네트워크 내에서는 `http://api:5000`을 사용합니다
+- `DB_HOST`는 Docker Compose 내부에서는 `postgres` (서비스 이름)를 사용합니다
+- 로컬 PC Agent 전용 환경 변수(`AGENT_SERVER_URL`, `NUCLEI_BINARY_PATH` 등)는 EC2 서버에 필요 없습니다
 
 ### 2.3 Docker Compose 실행
 
@@ -157,6 +181,22 @@ docker-compose up -d
 **서비스 상태 확인:**
 ```bash
 docker-compose ps
+```
+
+**⚠️ .env 파일 수정 후 재시작:**
+```bash
+# .env 파일을 수정한 경우 반드시 재시작 필요
+docker-compose restart
+
+# 또는 완전히 재시작 (더 확실)
+docker-compose down
+docker-compose up -d
+```
+
+**환경 변수 확인:**
+```bash
+# 컨테이너 내부에서 환경 변수 확인
+docker exec v2r-app env | grep OPENAI_API_KEY
 ```
 
 **예상 출력:**
