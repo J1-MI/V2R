@@ -18,70 +18,83 @@ V2R은 AWS 기반 격리 테스트베드에서 취약점을 자동으로 스캔�
 ## 아키텍처
 
 ```mermaid
-flowchart TB
-    subgraph EC2["🖥️ EC2 서버 (중앙 관리)"]
-        Dashboard["📊 Streamlit Dashboard<br/>작업 생성 및 결과 조회"]
-        API["🔌 Flask API Server<br/>포트 5000"]
-        DB[("💾 PostgreSQL<br/>스캔 결과 저장")]
-        Report["📄 Report Generator<br/>LLM 기반 리포트 생성"]
+flowchart LR
+    %% =========================
+    %% Subgraphs (영역 정의)
+    %% =========================
+    subgraph Control["🖥️ Control Plane (EC2)"]
+        Dashboard["📊 Dashboard"]
+        API["🔌 API Server (Flask)"]
+        DB[("💾 PostgreSQL")]
+        Report["📄 Report Generator"]
     end
 
-    subgraph Local["💻 로컬 PC"]
-        Agent["🤖 Agent<br/>Python 프로그램"]
-        Docker["🐳 Docker<br/>스캐너 실행 환경"]
+    subgraph Exec["💻 Execution Plane (Agent Host)"]
+        Agent["🤖 Agent"]
+        Docker["🐳 Docker Runtime"]
+
+        subgraph Scan["🔍 Scanner Pipeline"]
+            Nmap["Nmap<br/>Port Scan"]
+            Nuclei["Nuclei<br/>CVE Scan"]
+            VulnCheck["Vuln Checker<br/>Unauth Check"]
+        end
+
+        subgraph CCEArea["🛡️ CCE Checks"]
+            CCEScript["CCE Script"]
+        end
+
+        subgraph AnsibleArea["⚙️ Ansible Remote Exec"]
+            AnsibleExec["Ansible"]
+        end
     end
 
-    subgraph Scanner["🔍 Scanner Pipeline"]
-        Nmap["Nmap<br/>포트 스캔"]
-        Nuclei["Nuclei<br/>취약점 스캔"]
-        VulnCheck["Vulnerability Checker<br/>무인증 체크"]
+    subgraph Target["🎯 Target: CVE-Lab"]
+        WebApp["Vulnerable Web Apps<br/>(Jenkins, Log4j, etc.)"]
     end
 
-    subgraph Target["🎯 취약 환경 (CVE-Lab)"]
-        WebApp["취약 웹앱<br/>Jenkins, Log4j 등"]
-    end
+    %% =========================
+    %% Main Flow
+    %% =========================
+    Dashboard -->|Create job| API
+    API -->|Assign job| Agent
+    Agent -->|Poll / Fetch| API
 
-    subgraph CCE["🛡️ CCE 점검"]
-        CCEScript["CCE Check Script<br/>금융보안원 기준 점검"]
-    end
+    Agent --> Docker
+    Docker --> Scan
 
-    subgraph Ansible["⚙️ 원격 실행"]
-        AnsibleExec["Ansible<br/>원격 명령 실행"]
-    end
+    Scan -->|Scan target| WebApp
+    Scan --> Nmap
+    Scan --> Nuclei
+    Scan --> VulnCheck
 
-    %% 메인 워크플로우
-    Dashboard -->|작업 생성| API
-    API -->|작업 할당| Agent
-    Agent -->|폴링| API
-    Agent -->|스캔 실행| Docker
-    Docker -->|스캔 요청| Scanner
-    Scanner --> Nmap
-    Scanner --> Nuclei
-    Scanner --> VulnCheck
-    Scanner -->|스캔 대상| WebApp
-    Scanner -->|점검 실행| CCEScript
-    CCEScript -->|원격 점검| AnsibleExec
-    AnsibleExec -->|점검 대상| WebApp
-    Agent -->|결과 업로드| API
-    API -->|결과 저장| DB
-    DB -->|데이터 조회| Dashboard
-    DB -->|스캔 데이터| Report
-    Report -->|리포트 생성| Dashboard
+    %% CCE & Ansible
+    Agent --> CCEScript
+    CCEScript -->|Remote check| AnsibleExec
+    AnsibleExec -->|Check target| WebApp
 
-    %% 스타일 적용
-    classDef ec2Style fill:#e1f5ff,stroke:#01579b,stroke-width:2px
-    classDef localStyle fill:#fff4e1,stroke:#e65100,stroke-width:2px
-    classDef scannerStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    classDef targetStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
-    classDef cceStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef ansibleStyle fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    %% Result flow
+    Agent -->|Upload results| API
+    API -->|Store| DB
+    DB -->|Query| Dashboard
+    DB -->|Raw data| Report
+    Report -->|Final report| Dashboard
 
-    class Dashboard,API,DB,Report ec2Style
-    class Agent,Docker localStyle
-    class Nmap,Nuclei,VulnCheck scannerStyle
-    class WebApp targetStyle
-    class CCEScript cceStyle
-    class AnsibleExec ansibleStyle
+    %% =========================
+    %% Styles
+    %% =========================
+    classDef controlStyle fill:#e1f5ff,stroke:#01579b,stroke-width:2px;
+    classDef execStyle fill:#fff4e1,stroke:#e65100,stroke-width:2px;
+    classDef targetStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px;
+    classDef scanStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    classDef cceStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+    classDef ansibleStyle fill:#fff9c4,stroke:#f57f17,stroke-width:2px;
+
+    class Dashboard,API,DB,Report controlStyle;
+    class Agent,Docker execStyle;
+    class Scan scanStyle;
+    class CCEArea cceStyle;
+    class AnsibleArea ansibleStyle;
+    class WebApp targetStyle;
 ```
 
 ### 아키텍처 설명
