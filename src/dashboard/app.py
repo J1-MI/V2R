@@ -863,25 +863,44 @@ def show_report_generation():
                             poc_reproductions=[p.to_dict() for p in poc_reproductions]
                         )
 
-                        if result.get("success"):
+                        # result가 None이거나 정의되지 않은 경우 처리
+                        if result is None:
+                            st.error("리포트 생성 실패: 결과를 받지 못했습니다.")
+                            logger.error("Report generation returned None")
+                        elif result.get("success"):
                             st.success(f"리포트 생성 완료: {result.get('file_path')}")
-                            st.info(f"파일 크기: {result.get('file_size')} bytes")
+                            file_size = result.get('file_size', 0)
+                            st.info(f"파일 크기: {file_size:,} bytes")
+                            
+                            # 다운로드 버튼
+                            report_path = result.get("file_path")
+                            if report_path:
+                                report_path = Path(report_path)
+                                if report_path.exists():
+                                    try:
+                                        with open(report_path, "rb") as f:
+                                            file_data = f.read()
+                                            st.download_button(
+                                                label="📥 리포트 다운로드",
+                                                data=file_data,
+                                                file_name=report_path.name,
+                                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                            )
+                                    except Exception as download_error:
+                                        st.error(f"다운로드 파일 읽기 실패: {str(download_error)}")
+                                        logger.error(f"Failed to read report file: {str(download_error)}")
+                                else:
+                                    st.warning(f"리포트 파일을 찾을 수 없습니다: {report_path}")
+                                    logger.warning(f"Report file not found: {report_path}")
+                            else:
+                                st.warning("리포트 파일 경로가 없습니다.")
+                        else:
+                            error_msg = result.get('error', '알 수 없는 오류')
+                            st.error(f"리포트 생성 실패: {error_msg}")
+                            logger.error(f"Report generation failed: {error_msg}")
                     except Exception as e:
                         st.error(f"리포트 생성 실패: {str(e)}")
                         logger.error(f"리포트 생성 중 오류: {str(e)}", exc_info=True)
-
-                        # 다운로드 버튼
-                        report_path = Path(result.get("file_path"))
-                        if report_path.exists():
-                            with open(report_path, "rb") as f:
-                                st.download_button(
-                                    label="리포트 다운로드",
-                                    data=f.read(),
-                                    file_name=report_path.name,
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                )
-                    else:
-                        st.error(f"리포트 생성 실패: {result.get('error')}")
 
     except ProgrammingError as e:
         if "does not exist" in str(e) or "relation" in str(e).lower():
