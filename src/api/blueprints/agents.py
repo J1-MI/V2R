@@ -374,10 +374,10 @@ def create_task(agent_id: str):
         task_type = data["task_type"]
         parameters = data.get("parameters", {})
         
-        if task_type not in ["DOCKER_STATUS", "FULL_SCAN", "CCE_CHECK"]:
+        if task_type not in ["DOCKER_STATUS", "FULL_SCAN", "CCE_CHECK", "DB_INIT"]:
             return jsonify({
                 "success": False,
-                "error": "task_type은 DOCKER_STATUS, FULL_SCAN, CCE_CHECK 중 하나여야 합니다."
+                "error": "task_type은 DOCKER_STATUS, FULL_SCAN, CCE_CHECK, DB_INIT 중 하나여야 합니다."
             }), 400
         
         # Agent 존재 확인

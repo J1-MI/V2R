@@ -38,11 +38,13 @@ def main():
         st.header("메뉴")
         page = st.radio(
             "페이지 선택",
-            ["대시보드", "취약점 리스트", "PoC 재현 결과", "CCE 점검 결과", "Agent & Local Scanner", "리포트 생성"]
+            ["Agent & Local Scanner", "대시보드", "취약점 리스트", "PoC 재현 결과", "CCE 점검 결과", "리포트 생성"]
         )
 
     # 페이지 라우팅
-    if page == "대시보드":
+    if page == "Agent & Local Scanner":
+        show_agent_control()
+    elif page == "대시보드":
         show_dashboard()
     elif page == "취약점 리스트":
         show_vulnerability_list()
@@ -50,8 +52,6 @@ def main():
         show_poc_reproductions()
     elif page == "CCE 점검 결과":
         show_cce_checks()
-    elif page == "Agent & Local Scanner":
-        show_agent_control()
     elif page == "리포트 생성":
         show_report_generation()
 
@@ -697,7 +697,7 @@ def show_agent_control():
                 
                 # 작업 생성 버튼
                 st.subheader("작업 생성")
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 
                 agent_id = agent.get("agent_id")
                 
@@ -722,6 +722,15 @@ def show_agent_control():
                         task_id = create_task(agent_id, "CCE_CHECK")
                         if task_id:
                             st.success(f"✅ 작업 생성 완료: {task_id}")
+                        else:
+                            st.error("❌ 작업 생성 실패")
+                
+                with col4:
+                    if st.button("🗄️ DB 초기화", key=f"db_init_{agent_id}", help="데이터베이스를 초기화하고 스키마를 재생성합니다"):
+                        task_id = create_task(agent_id, "DB_INIT")
+                        if task_id:
+                            st.success(f"✅ 작업 생성 완료: {task_id}")
+                            st.warning("⚠️ 주의: DB 초기화는 모든 데이터를 삭제합니다!")
                         else:
                             st.error("❌ 작업 생성 실패")
                 
