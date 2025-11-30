@@ -6,7 +6,7 @@ set -e
 
 EC2_IP=$1
 KEY_FILE=$2
-USER=${3:-ubuntu}
+USER=${3:-ec2-user}
 
 if [ -z "$EC2_IP" ] || [ -z "$KEY_FILE" ]; then
     echo "Usage: $0 <ec2-ip> <key-file> [user]"
@@ -63,18 +63,34 @@ ssh -i "$KEY_FILE" "$USER@$EC2_IP" << 'ENDSSH'
     
     echo "4. 환경 설정 확인 중..."
     
+    # OS 확인
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        OS="unknown"
+    fi
+    
     # Python 확인
     if ! command -v python3 &> /dev/null; then
         echo "Python3 설치 중..."
-        sudo apt-get update
-        sudo apt-get install -y python3 python3-pip
+        if [ "$OS" = "amzn" ] || [ "$OS" = "amazon" ]; then
+            sudo dnf install -y python3.11 python3-pip
+        else
+            sudo apt-get update
+            sudo apt-get install -y python3 python3-pip
+        fi
     fi
     
     # Docker 확인
     if ! command -v docker &> /dev/null; then
         echo "Docker 설치 중..."
-        sudo apt-get update
-        sudo apt-get install -y docker.io docker-compose
+        if [ "$OS" = "amzn" ] || [ "$OS" = "amazon" ]; then
+            sudo dnf install -y docker docker-compose
+        else
+            sudo apt-get update
+            sudo apt-get install -y docker.io docker-compose
+        fi
         sudo systemctl start docker
         sudo systemctl enable docker
         sudo usermod -aG docker $USER

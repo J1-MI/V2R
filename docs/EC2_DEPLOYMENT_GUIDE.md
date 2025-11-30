@@ -27,50 +27,51 @@
 
 ## 1. EC2 서버 준비
 
-### 1.1 EC2 인스턴스 생성
+### 1.1 기존 EC2 서버 정보
 
-1. AWS 콘솔에서 EC2 인스턴스 생성
-   - **AMI**: Ubuntu 22.04 LTS (또는 Amazon Linux 2023)
-   - **인스턴스 타입**: t3.medium 이상 권장
-   - **보안 그룹**: 다음 포트 열기
-     - SSH (22)
-     - PostgreSQL (5432) - 선택사항 (Docker 사용 시 불필요)
-     - Streamlit 대시보드 (8501)
-     - Flask API 서버 (5000)
+**현재 사용 중인 서버:**
+- **서버 이름**: v2r-server
+- **OS**: Amazon Linux 2023
+- **인스턴스 타입**: t3.small
+- **퍼블릭 IPv4**: 3.36.15.26
 
-2. 키 페어 다운로드 및 권한 설정
-   ```bash
-   # Linux/Mac
-   chmod 400 your-key.pem
-   
-   # Windows PowerShell
-   icacls your-key.pem /inheritance:r
-   icacls your-key.pem /grant:r "%USERNAME%:R"
-   ```
+**보안 그룹 설정 확인:**
+- SSH (22): 접속용
+- PostgreSQL (5432): 선택사항 (Docker 사용 시 불필요)
+- Streamlit 대시보드 (8501): 외부 접근용
+- Flask API 서버 (5000): 외부 접근용
 
 ### 1.2 EC2 서버 초기 설정
 
 **SSH 접속:**
 ```bash
-ssh -i your-key.pem ubuntu@your-ec2-ip
+# Amazon Linux 2023은 ec2-user 사용
+ssh -i your-key.pem ec2-user@3.36.15.26
 ```
 
-**초기 설정 스크립트 실행:**
+**초기 설정 스크립트 실행 (Amazon Linux 2023용):**
 ```bash
 # 프로젝트 디렉토리로 이동 (또는 Git에서 클론)
 cd ~
 git clone https://github.com/J1-MI/V2R.git
 cd V2R
 
-# 또는 배포 스크립트 사용
-# 로컬에서: ./scripts/deployment/deploy_to_ec2.sh <ec2-ip> <key-file>
+# Amazon Linux 2023 초기 설정 스크립트 실행
+chmod +x scripts/deployment/setup_amazon_linux.sh
+./scripts/deployment/setup_amazon_linux.sh
 ```
 
-**수동 설정:**
+**수동 설정 (Amazon Linux 2023):**
 ```bash
+# 시스템 업데이트
+sudo dnf update -y
+
 # 필수 패키지 설치
-sudo apt-get update
-sudo apt-get install -y docker.io docker-compose python3 python3-pip git
+sudo dnf install -y python3.11 python3-pip git docker docker-compose postgresql15 nmap gcc gcc-c++ make python3-devel curl wget
+
+# Docker 설정
+sudo systemctl start docker
+sudo systemctl enable docker
 
 # Docker 그룹에 사용자 추가
 sudo usermod -aG docker $USER
@@ -93,9 +94,9 @@ cd V2R
 
 **방법 2: 배포 스크립트 사용**
 ```bash
-# 로컬 PC에서
+# 로컬 PC에서 (Amazon Linux 2023은 ec2-user 사용)
 chmod +x scripts/deployment/deploy_to_ec2.sh
-./scripts/deployment/deploy_to_ec2.sh <ec2-ip> ~/.ssh/your-key.pem ubuntu
+./scripts/deployment/deploy_to_ec2.sh 3.36.15.26 ~/.ssh/your-key.pem ec2-user
 ```
 
 **방법 3: 수동 배포**
@@ -105,7 +106,7 @@ tar --exclude='venv' --exclude='__pycache__' --exclude='.git' \
     --exclude='evidence' --exclude='reports' \
     -czf v2r_deploy.tar.gz .
 
-scp -i your-key.pem v2r_deploy.tar.gz ubuntu@your-ec2-ip:/tmp/
+scp -i your-key.pem v2r_deploy.tar.gz ec2-user@3.36.15.26:/tmp/
 
 # EC2 서버에서
 cd ~
@@ -226,7 +227,7 @@ docker exec v2r-app ps aux | grep streamlit
 **로컬 PC에서 테스트:**
 ```bash
 # API 서버 상태 확인
-curl http://your-ec2-ip:5000/api/agents
+curl http://3.36.15.26:5000/api/agents
 
 # 예상 응답:
 # {"success":true,"agents":[]}
@@ -241,7 +242,7 @@ curl http://localhost:5000/api/agents
 
 **브라우저에서 접속:**
 ```
-http://your-ec2-ip:8501
+http://3.36.15.26:8501
 ```
 
 **예상 화면:**
