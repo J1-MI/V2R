@@ -4,6 +4,7 @@
 """
 
 from src.pipeline.scanner_pipeline import ScannerPipeline
+from src.pipeline.poc_pipeline import POCPipeline
 
-__all__ = ["ScannerPipeline"]
+__all__ = ["ScannerPipeline", "POCPipeline"]
 
