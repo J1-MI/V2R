@@ -15,7 +15,9 @@ from src.database.models import (
     POCReproduction,
     Event,
     Report,
-    CCECheckResult
+    CCECheckResult,
+    Agent,
+    AgentTask
 )
 
 logger = logging.getLogger(__name__)
@@ -53,13 +55,16 @@ class ScanResultRepository:
             ).first()
 
             if existing:
-                # 업데이트
-                for key, value in scan_data.items():
-                    if hasattr(existing, key) and key not in ["id", "scan_id", "created_at"]:
-                        setattr(existing, key, value)
-                existing.updated_at = datetime.now()
-                result = existing
-                logger.info(f"Updated scan result: {scan_data['scan_id']}")
+                # 기존 레코드가 있으면 업데이트하지 않고 새 레코드 생성
+                # (같은 scan_id로 여러 스캔이 있을 수 있으므로)
+                # 대신 scan_id에 타임스탬프를 추가하여 고유하게 만듦
+                from src.utils.id_generator import generate_scan_id
+                import time
+                new_scan_id = f"{scan_data['scan_id']}_{int(time.time() * 1000)}"
+                scan_data['scan_id'] = new_scan_id
+                result = ScanResult(**scan_data)
+                self.session.add(result)
+                logger.info(f"Created new scan result (duplicate avoided): {new_scan_id}")
             else:
                 # 새로 생성
                 result = ScanResult(**scan_data)
@@ -164,7 +169,10 @@ class ScanResultRepository:
         ).order_by(desc(ScanResult.scan_timestamp)).all()
 
     def get_statistics(self, target_host: Optional[str] = None) -> Dict[str, Any]:
-        """스캔 결과 통계"""
+        """
+        스캔 결과 통계
+        normalized_result.findings에서 severity를 추출하여 집계
+        """
         query = self.session.query(ScanResult)
 
         if target_host:
@@ -172,7 +180,7 @@ class ScanResultRepository:
 
         total = query.count()
         by_status = {}
-        by_severity = {}
+        by_severity = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
         by_scanner = {}
 
         # 상태별 통계
@@ -181,11 +189,43 @@ class ScanResultRepository:
             if count > 0:
                 by_status[status] = count
 
-        # 심각도별 통계
-        for severity in ["Critical", "High", "Medium", "Low", "Info"]:
-            count = query.filter(ScanResult.severity == severity).count()
-            if count > 0:
-                by_severity[severity] = count
+        # 심각도별 통계: normalized_result.findings에서 추출
+        all_scan_results = query.all()
+        for scan_result in all_scan_results:
+            # normalized_result에서 findings 추출
+            normalized_result = scan_result.normalized_result
+            if normalized_result and isinstance(normalized_result, dict):
+                findings = normalized_result.get("findings", [])
+                if findings:
+                    # 각 finding의 severity 추출
+                    for finding in findings:
+                        if isinstance(finding, dict):
+                            severity = finding.get("severity", "")
+                            if severity in by_severity:
+                                by_severity[severity] += 1
+                            elif severity:
+                                # 대소문자 구분 없이 매칭
+                                severity_lower = severity.lower()
+                                if severity_lower == "critical":
+                                    by_severity["Critical"] += 1
+                                elif severity_lower == "high":
+                                    by_severity["High"] += 1
+                                elif severity_lower == "medium":
+                                    by_severity["Medium"] += 1
+                                elif severity_lower == "low":
+                                    by_severity["Low"] += 1
+                                else:
+                                    by_severity["Info"] += 1
+            
+            # scan_result.severity도 확인 (fallback)
+            if scan_result.severity and scan_result.severity in by_severity:
+                # 이미 findings에서 집계했으므로 중복 방지
+                # 하지만 findings가 없는 경우를 대비하여 scan_result.severity도 사용
+                if not (normalized_result and isinstance(normalized_result, dict) and normalized_result.get("findings")):
+                    by_severity[scan_result.severity] += 1
+
+        # 0인 항목 제거
+        by_severity = {k: v for k, v in by_severity.items() if v > 0}
 
         # 스캐너별 통계
         scanner_stats = query.with_entities(
@@ -432,5 +472,191 @@ class CCECheckResultRepository:
             "total": total,
             "by_result": by_result,
             "by_severity": by_severity
+        }
+
+
+class AgentRepository:
+    """Agent 저장소"""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def save(self, agent_data: Dict[str, Any]) -> Agent:
+        """Agent 저장"""
+        try:
+            existing = self.session.query(Agent).filter(
+                Agent.agent_id == agent_data["agent_id"]
+            ).first()
+
+            if existing:
+                for key, value in agent_data.items():
+                    if hasattr(existing, key) and key not in ["id", "agent_id", "created_at"]:
+                        setattr(existing, key, value)
+                existing.updated_at = datetime.now()
+                result = existing
+            else:
+                result = Agent(**agent_data)
+                self.session.add(result)
+
+            self.session.commit()
+            return result
+
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to save agent: {str(e)}")
+            raise
+
+    def get_by_id(self, agent_id: str) -> Optional[Agent]:
+        """Agent ID로 조회"""
+        return self.session.query(Agent).filter(
+            Agent.agent_id == agent_id
+        ).first()
+
+    def get_by_token_hash(self, token_hash: str) -> Optional[Agent]:
+        """토큰 해시로 조회"""
+        return self.session.query(Agent).filter(
+            Agent.agent_token_hash == token_hash
+        ).first()
+
+    def get_all(self, limit: int = 100) -> List[Agent]:
+        """모든 Agent 조회"""
+        return self.session.query(Agent).order_by(
+            desc(Agent.created_at)
+        ).limit(limit).all()
+
+    def update_last_seen(self, agent_id: str) -> bool:
+        """마지막 접속 시간 업데이트"""
+        try:
+            agent = self.get_by_id(agent_id)
+            if agent:
+                agent.last_seen = datetime.now()
+                agent.status = "online"
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to update last_seen: {str(e)}")
+            return False
+
+    def update_status(self, agent_id: str, status: str) -> bool:
+        """Agent 상태 업데이트"""
+        try:
+            agent = self.get_by_id(agent_id)
+            if agent:
+                agent.status = status
+                if status == "online":
+                    agent.last_seen = datetime.now()
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to update status: {str(e)}")
+            return False
+
+
+class AgentTaskRepository:
+    """Agent 작업 저장소"""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def save(self, task_data: Dict[str, Any]) -> AgentTask:
+        """작업 저장"""
+        try:
+            existing = self.session.query(AgentTask).filter(
+                AgentTask.task_id == task_data["task_id"]
+            ).first()
+
+            if existing:
+                for key, value in task_data.items():
+                    if hasattr(existing, key) and key not in ["id", "task_id", "created_at"]:
+                        setattr(existing, key, value)
+                existing.updated_at = datetime.now()
+                result = existing
+            else:
+                result = AgentTask(**task_data)
+                self.session.add(result)
+
+            self.session.commit()
+            return result
+
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to save agent task: {str(e)}")
+            raise
+
+    def get_by_id(self, task_id: str) -> Optional[AgentTask]:
+        """작업 ID로 조회"""
+        return self.session.query(AgentTask).filter(
+            AgentTask.task_id == task_id
+        ).first()
+
+    def get_by_agent_id(self, agent_id: str, status: Optional[str] = None, limit: int = 100) -> List[AgentTask]:
+        """Agent ID로 작업 조회"""
+        query = self.session.query(AgentTask).filter(
+            AgentTask.agent_id == agent_id
+        )
+
+        if status:
+            if status.lower() == "all":
+                # 모든 상태 반환
+                pass
+            else:
+                query = query.filter(AgentTask.status == status)
+
+        return query.order_by(desc(AgentTask.created_at)).limit(limit).all()
+
+    def get_pending_tasks(self, agent_id: str) -> List[AgentTask]:
+        """대기 중인 작업 조회 (기본값)"""
+        return self.get_by_agent_id(agent_id, status="pending")
+
+    def update_status(self, task_id: str, status: str, result: Optional[Dict[str, Any]] = None) -> bool:
+        """작업 상태 업데이트"""
+        try:
+            task = self.get_by_id(task_id)
+            if task:
+                task.status = status
+                if result is not None:
+                    task.result = result
+                task.updated_at = datetime.now()
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            logger.error(f"Failed to update task status: {str(e)}")
+            return False
+
+    def get_statistics(self, agent_id: Optional[str] = None) -> Dict[str, Any]:
+        """작업 통계"""
+        query = self.session.query(AgentTask)
+
+        if agent_id:
+            query = query.filter(AgentTask.agent_id == agent_id)
+
+        total = query.count()
+        by_status = {}
+        by_type = {}
+
+        # 상태별 통계
+        for status in ["pending", "running", "completed", "failed"]:
+            count = query.filter(AgentTask.status == status).count()
+            if count > 0:
+                by_status[status] = count
+
+        # 타입별 통계
+        type_stats = query.with_entities(
+            AgentTask.task_type,
+            func.count(AgentTask.id)
+        ).group_by(AgentTask.task_type).all()
+
+        by_type = {task_type: count for task_type, count in type_stats}
+
+        return {
+            "total": total,
+            "by_status": by_status,
+            "by_type": by_type
         }
 

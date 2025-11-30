@@ -99,8 +99,11 @@ class DatabaseConnection:
             with db.get_session() as session:
                 # DB 작업 수행
         """
-        if self.engine is None:
+        if self.engine is None or self.SessionLocal is None:
             self.connect()
+
+        if self.SessionLocal is None:
+            raise RuntimeError("Database session factory is not initialized. Connection may have failed.")
 
         session = self.SessionLocal()
         try:
@@ -221,7 +224,12 @@ def get_db() -> DatabaseConnection:
     global _db_instance
     if _db_instance is None:
         _db_instance = DatabaseConnection()
-        _db_instance.connect()
+        try:
+            _db_instance.connect()
+        except Exception as e:
+            logger.error(f"Failed to initialize database connection: {str(e)}")
+            # 연결 실패 시에도 인스턴스는 반환하되, 다음 호출 시 재시도 가능하도록
+            raise
     return _db_instance
 
 

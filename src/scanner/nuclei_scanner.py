@@ -20,13 +20,26 @@ class NucleiScanner:
     def __init__(self, nuclei_path: Optional[str] = None, templates_path: Optional[str] = None):
         """
         Args:
-            nuclei_path: Nuclei 실행 파일 경로 (None이면 PATH에서 찾음)
-            templates_path: Nuclei 템플릿 경로
+            nuclei_path: Nuclei 실행 파일 경로 (None이면 환경 변수 또는 PATH에서 찾음)
+            templates_path: Nuclei 템플릿 경로 (None이면 환경 변수 또는 기본값 사용)
         """
-        self.nuclei_path = nuclei_path or "nuclei"
+        # 환경 변수에서 읽기 (우선순위: 인자 > 환경 변수 > 기본값)
+        if nuclei_path is None:
+            nuclei_path = os.getenv("NUCLEI_BINARY_PATH", None)
+        if nuclei_path is None:
+            nuclei_path = "nuclei"  # PATH에서 찾음
+        
+        if templates_path is None:
+            templates_path = os.getenv("NUCLEI_TEMPLATES_DIR", None)
+        if templates_path is None:
+            templates_path = os.getenv("NUCLEI_TEMPLATES_PATH", None)
+        
+        self.nuclei_path = nuclei_path
         self.templates_path = templates_path
         self.scan_id = None
         self.target = None
+        
+        logger.info(f"NucleiScanner 초기화: binary={self.nuclei_path}, templates={self.templates_path}")
 
     def _check_nuclei_installed(self) -> bool:
         """Nuclei가 설치되어 있는지 확인"""

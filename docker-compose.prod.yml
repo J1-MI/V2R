@@ -9,9 +9,16 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile  # 프로덕션 Dockerfile 사용
     restart: unless-stopped
+    env_file:
+      - .env  # .env 파일에서 환경 변수 로드
     environment:
       # 프로덕션 환경 변수는 .env.prod에서 로드
       FLASK_ENV: production
+      # API 서버 설정 (Docker 네트워크 내에서는 서비스 이름 사용)
+      API_SERVER_URL: http://api:5000
+      # LLM 설정 (env_file에서 로드되지만 명시적으로도 설정)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
     volumes:
       # 프로덕션에서는 코드 마운트 제거 (이미지에 포함)
       - ./evidence:/app/evidence:ro

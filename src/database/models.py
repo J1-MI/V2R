@@ -251,3 +251,66 @@ class CCECheckResult(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class Agent(Base):
+    """Agent 테이블 모델"""
+    __tablename__ = "agents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agent_id = Column(String(255), unique=True, nullable=False, index=True)
+    agent_name = Column(String(255), nullable=False)
+    agent_token_hash = Column(String(255), nullable=False)  # SHA256 해시값
+    os_info = Column(JSONB)  # OS 정보 (JSON)
+    last_seen = Column(TIMESTAMP)  # 마지막 접속 시간
+    status = Column(String(50), default="offline")  # online, offline
+    created_at = Column(TIMESTAMP, default=func.now())
+    updated_at = Column(TIMESTAMP, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<Agent(agent_id={self.agent_id}, name={self.agent_name}, status={self.status})>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리로 변환"""
+        return {
+            "id": self.id,
+            "agent_id": self.agent_id,
+            "agent_name": self.agent_name,
+            "os_info": self.os_info,
+            "last_seen": self.last_seen.isoformat() if self.last_seen else None,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class AgentTask(Base):
+    """Agent 작업 테이블 모델"""
+    __tablename__ = "agent_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(255), unique=True, nullable=False, index=True)
+    agent_id = Column(String(255), ForeignKey("agents.agent_id", ondelete="CASCADE"), nullable=False, index=True)
+    task_type = Column(String(100), nullable=False)  # DOCKER_STATUS, FULL_SCAN, CCE_CHECK
+    status = Column(String(50), default="pending")  # pending, running, completed, failed
+    parameters = Column(JSONB)  # 작업 파라미터 (JSON)
+    result = Column(JSONB)  # 작업 결과 (JSON)
+    created_at = Column(TIMESTAMP, default=func.now())
+    updated_at = Column(TIMESTAMP, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<AgentTask(task_id={self.task_id}, agent_id={self.agent_id}, type={self.task_type}, status={self.status})>"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리로 변환"""
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "agent_id": self.agent_id,
+            "task_type": self.task_type,
+            "status": self.status,
+            "parameters": self.parameters,
+            "result": self.result,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

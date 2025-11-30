@@ -103,6 +103,32 @@ CREATE TABLE IF NOT EXISTS cce_check_results (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Agent 테이블
+CREATE TABLE IF NOT EXISTS agents (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id VARCHAR(255) UNIQUE NOT NULL,
+    agent_name VARCHAR(255) NOT NULL,
+    agent_token_hash VARCHAR(255) NOT NULL,
+    os_info JSONB,
+    last_seen TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'offline',  -- online, offline
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Agent 작업 테이블
+CREATE TABLE IF NOT EXISTS agent_tasks (
+    id BIGSERIAL PRIMARY KEY,
+    task_id VARCHAR(255) UNIQUE NOT NULL,
+    agent_id VARCHAR(255) NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+    task_type VARCHAR(100) NOT NULL,  -- DOCKER_STATUS, FULL_SCAN, CCE_CHECK
+    status VARCHAR(50) DEFAULT 'pending',  -- pending, running, completed, failed
+    parameters JSONB,
+    result JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_scan_results_target ON scan_results(target_host);
 CREATE INDEX IF NOT EXISTS idx_scan_results_timestamp ON scan_results(scan_timestamp);
@@ -114,6 +140,11 @@ CREATE INDEX IF NOT EXISTS idx_poc_metadata_cve ON poc_metadata(cve_id);
 CREATE INDEX IF NOT EXISTS idx_poc_reproductions_poc ON poc_reproductions(poc_id);
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(event_timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity);
+CREATE INDEX IF NOT EXISTS idx_agents_agent_id ON agents(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_agent_id ON agent_tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_task_id ON agent_tasks(task_id);
 
 -- 업데이트 트리거 함수
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -135,5 +166,11 @@ CREATE TRIGGER update_poc_reproductions_updated_at BEFORE UPDATE ON poc_reproduc
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_reports_updated_at BEFORE UPDATE ON reports
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agents_updated_at BEFORE UPDATE ON agents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agent_tasks_updated_at BEFORE UPDATE ON agent_tasks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

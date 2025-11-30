@@ -13,6 +13,7 @@ override.tf.json
 
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -38,6 +39,8 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+*.pyc
+*.pyo
 
 # IDEs
 .vscode/

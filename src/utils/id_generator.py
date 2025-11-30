@@ -47,8 +47,9 @@ def generate_scan_id(scanner_name: str, target: str, suffix: Optional[str] = Non
     Returns:
         고유한 스캔 ID
     """
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
+    # UUID를 먼저 생성하여 고유성 보장 (타임스탬프보다 먼저)
     unique_id = str(uuid.uuid4())[:8]  # UUID 앞 8자리
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 밀리초 3자리
     safe_target = sanitize_target_name(target)
     
     # 접미사 처리
@@ -58,9 +59,11 @@ def generate_scan_id(scanner_name: str, target: str, suffix: Optional[str] = Non
             suffix = hashlib.md5(suffix.encode()).hexdigest()[:8]
         else:
             suffix = suffix.replace(",", "_").replace("-", "_").replace(" ", "_")
-        return f"{scanner_name}_{safe_target}_{suffix}_{timestamp}_{unique_id}"
+        # UUID를 앞에 배치하여 고유성 강화
+        return f"{scanner_name}_{safe_target}_{suffix}_{unique_id}_{timestamp}"
     
-    return f"{scanner_name}_{safe_target}_{timestamp}_{unique_id}"
+    # UUID를 앞에 배치하여 고유성 강화
+    return f"{scanner_name}_{safe_target}_{unique_id}_{timestamp}"
 
 
 def generate_session_id(prefix: str, target_name: Optional[str] = None, 
@@ -99,3 +102,55 @@ def generate_container_name(prefix: str, identifier: str) -> str:
     safe_id = sanitize_target_name(identifier)
     return f"{prefix}-{safe_id}"
 
+
+def generate_agent_id(agent_name: str) -> str:
+    """
+    Agent ID 생성
+    
+    Args:
+        agent_name: Agent 이름
+        
+    Returns:
+        고유한 Agent ID
+    """
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
+    unique_id = str(uuid.uuid4())[:8]
+    safe_name = sanitize_target_name(agent_name)
+    return f"agent_{safe_name}_{timestamp}_{unique_id}"
+
+
+def generate_agent_token() -> str:
+    """
+    Agent 토큰 생성
+    
+    Returns:
+        고유한 Agent 토큰 (원본)
+    """
+    return str(uuid.uuid4()) + "-" + str(uuid.uuid4())
+
+
+def hash_token(token: str) -> str:
+    """
+    토큰을 SHA256 해시로 변환
+    
+    Args:
+        token: 원본 토큰
+        
+    Returns:
+        해시된 토큰 (SHA256)
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def verify_token(token: str, token_hash: str) -> bool:
+    """
+    토큰 검증
+    
+    Args:
+        token: 원본 토큰
+        token_hash: 저장된 해시값
+        
+    Returns:
+        검증 성공 여부
+    """
+    return hash_token(token) == token_hash

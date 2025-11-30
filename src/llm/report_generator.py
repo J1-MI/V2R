@@ -4,8 +4,21 @@ OpenAI API를 사용하여 Executive Summary 및 취약점 요약을 생성합�
 """
 
 import logging
+import os
 from typing import Dict, Any, Optional, List
 import json
+from pathlib import Path
+from dotenv import load_dotenv
+
+# .env 파일 로드 (컨테이너 내부 경로도 확인)
+env_path = Path(__file__).parent.parent.parent / ".env"
+if not env_path.exists():
+    # Docker 컨테이너 내부 경로 시도
+    docker_env_path = Path("/app/.env")
+    if docker_env_path.exists():
+        env_path = docker_env_path
+if env_path.exists():
+    load_dotenv(env_path, override=True)
 
 from src.config import OPENAI_API_KEY, LLM_MODEL
 
@@ -21,12 +34,23 @@ class LLMReportGenerator:
             api_key: OpenAI API 키 (None이면 config에서 읽음)
             model: LLM 모델 (None이면 config에서 읽음)
         """
-        self.api_key = api_key or OPENAI_API_KEY
-        self.model = model or LLM_MODEL
+        # API 키 우선순위: 인자 > 환경 변수 > config
+        # 환경 변수에서 직접 읽기 (Docker 컨테이너 내부에서도 동작)
+        env_api_key = os.getenv("OPENAI_API_KEY")
+        env_model = os.getenv("LLM_MODEL")
+        
+        self.api_key = api_key or env_api_key or OPENAI_API_KEY
+        self.model = model or env_model or LLM_MODEL
         self.client = None
 
+        # 디버깅을 위한 로그
+        logger.debug(f"API Key 검색 결과: 인자={api_key is not None}, 환경변수={env_api_key is not None}, config={bool(OPENAI_API_KEY)}")
+        
         if not self.api_key:
-            logger.warning("OpenAI API key not provided")
+            logger.warning("OpenAI API key not provided. LLM 기능을 사용할 수 없습니다.")
+            logger.warning("환경 변수 OPENAI_API_KEY를 설정하거나 .env 파일에 추가하세요.")
+            logger.warning(f"현재 환경 변수 OPENAI_API_KEY: {'SET' if env_api_key else 'NOT SET'}")
+            logger.warning(f"현재 config OPENAI_API_KEY: {'SET' if OPENAI_API_KEY else 'NOT SET'}")
         else:
             try:
                 from openai import OpenAI

@@ -22,7 +22,17 @@ class ReportGenerator:
         Args:
             llm_generator: LLM 리포트 생성기 (None이면 자동 생성)
         """
-        self.llm_generator = llm_generator or LLMReportGenerator()
+        # LLM 생성기 초기화 (명시적으로 생성하여 로그 확인)
+        if llm_generator is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("LLMReportGenerator 초기화 중...")
+            llm_generator = LLMReportGenerator()
+            if llm_generator.client:
+                logger.info("✅ LLM 연결 성공")
+            else:
+                logger.warning("⚠️ LLM 연결 실패 - Fallback summary 사용")
+        self.llm_generator = llm_generator
         self.reports_dir = PROJECT_ROOT / "reports"
         self.reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -46,6 +56,8 @@ class ReportGenerator:
             리포트 생성 결과 딕셔너리
         """
         try:
+            logger.info(f"리포트 생성 시작: report_id={report_id}, scan_results={len(scan_results)}, poc_reproductions={len(poc_reproductions)}")
+            
             from docx import Document
             from docx.shared import Inches, Pt
             from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -58,10 +70,17 @@ class ReportGenerator:
 
             # 2. Executive Summary
             if executive_summary is None:
-                summary_data = self.llm_generator.generate_executive_summary(
-                    scan_results, poc_reproductions
-                )
-                executive_summary = summary_data.get("executive_summary", "")
+                try:
+                    summary_data = self.llm_generator.generate_executive_summary(
+                        scan_results, poc_reproductions
+                    )
+                    executive_summary = summary_data.get("executive_summary", "")
+                    if not executive_summary:
+                        logger.warning("LLM이 Executive Summary를 생성하지 못했습니다. Fallback summary를 사용합니다.")
+                        executive_summary = "LLM을 통한 Executive Summary 생성에 실패했습니다. 기본 요약을 사용합니다."
+                except Exception as e:
+                    logger.error(f"Executive Summary 생성 중 오류: {str(e)}")
+                    executive_summary = f"Executive Summary 생성 중 오류가 발생했습니다: {str(e)}"
 
             self._add_executive_summary(doc, executive_summary)
 
@@ -78,28 +97,54 @@ class ReportGenerator:
 
             # 리포트 저장
             report_path = self.reports_dir / f"{report_id}.docx"
+            
+            # 디렉토리 존재 확인 및 생성
+            self.reports_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"리포트 저장 경로: {report_path}")
+            
             doc.save(str(report_path))
-
-            logger.info(f"Report generated: {report_path}")
+            
+            # 파일 저장 확인
+            if not report_path.exists():
+                raise FileNotFoundError(f"리포트 파일이 생성되지 않았습니다: {report_path}")
+            
+            file_size = report_path.stat().st_size
+            logger.info(f"리포트 생성 완료: {report_path} (크기: {file_size:,} bytes)")
 
             return {
                 "success": True,
                 "report_id": report_id,
                 "file_path": str(report_path),
-                "file_size": report_path.stat().st_size
+                "file_size": file_size
             }
 
-        except ImportError:
-            logger.error("python-docx not installed. Install with: pip install python-docx")
+        except ImportError as e:
+            error_msg = f"python-docx 패키지가 설치되지 않았습니다. 'pip install python-docx'로 설치하세요. ({str(e)})"
+            logger.error(error_msg)
             return {
                 "success": False,
-                "error": "python-docx package not installed"
+                "error": error_msg
+            }
+        except FileNotFoundError as e:
+            error_msg = f"리포트 파일 저장 실패: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "success": False,
+                "error": error_msg
+            }
+        except PermissionError as e:
+            error_msg = f"리포트 파일 저장 권한 오류: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "success": False,
+                "error": error_msg
             }
         except Exception as e:
-            logger.error(f"Failed to generate report: {str(e)}")
+            error_msg = f"리포트 생성 중 오류 발생: {str(e)}"
+            logger.error(f"Failed to generate report: {error_msg}", exc_info=True)
             return {
                 "success": False,
-                "error": str(e)
+                "error": error_msg
             }
 
     def _add_cover_page(self, doc, report_id: str):
@@ -144,9 +189,21 @@ class ReportGenerator:
         """취약점 상세 추가"""
         doc.add_heading("취약점 상세", 1)
 
+        if not scan_results:
+            doc.add_paragraph("스캔 결과가 없습니다.")
+            return
+
         for scan_result in scan_results:
             normalized = scan_result.get("normalized_result", {})
             findings = normalized.get("findings", [])
+
+            if not findings:
+                # findings가 없으면 기본 정보만 표시
+                doc.add_heading(f"스캔 결과: {scan_result.get('target_host', 'Unknown')}", 2)
+                doc.add_paragraph(f"스캐너: {scan_result.get('scanner_name', 'Unknown')}")
+                doc.add_paragraph(f"심각도: {scan_result.get('severity', 'Unknown')}")
+                doc.add_paragraph()
+                continue
 
             for finding in findings:
                 # 취약점 제목
